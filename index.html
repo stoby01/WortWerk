@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Ein lokaler, offline nutzbarer Vokabeltrainer mit Lernplanung, Statistik und Datensicherungen."
+    />
+    <meta name="theme-color" content="#315c4b" />
+    <meta name="application-name" content="Wortwerk" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Wortwerk" />
+    <title>Wortwerk – Vokabeltrainer</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-launch-screen" id="appLaunchScreen" role="status" aria-live="polite">
+      <img src="icons/icon-192.png" alt="" width="96" height="96" />
+      <strong>Wortwerk</strong>
+      <span id="appLaunchStatus">Deine lokale Lernsammlung wird vorbereitet …</span>
+    </div>
+
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img">
+              <path d="M6.5 4.5h9a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2h-10a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Z" />
+              <path d="M7.5 4.5v15M10.5 9h5M10.5 13h3.5" />
+            </svg>
+          </div>
+          <div>
+            <span class="brand-name">Wortwerk</span>
+            <span class="brand-subtitle">Vokabeltrainer</span>
+          </div>
+        </div>
+
+        <nav class="main-nav" aria-label="Hauptnavigation">
+          <button class="main-nav-item" id="statisticsNav" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+            </svg>
+            <span>
+              <strong>Lernstatistik</strong>
+              <small>Rhythmus und Fortschritt</small>
+            </span>
+          </button>
+          <button class="main-nav-item" id="securityNav" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3 4.5 6v5.5c0 4.7 3.1 8 7.5 9.5 4.4-1.5 7.5-4.8 7.5-9.5V6L12 3Z" />
+              <path d="m9 12 2 2 4-5" />
+            </svg>
+            <span>
+              <strong>Datensicherheit</strong>
+              <small>Sicherungen und Papierkorb</small>
+            </span>
+          </button>
+        </nav>
+
+        <div class="sidebar-heading">
+          <span>Meine Stapel</span>
+          <span class="deck-total" id="deckTotal">0</span>
+        </div>
+
+        <nav class="deck-list" id="deckList" aria-label="Vokabelstapel"></nav>
+
+        <button class="button button-secondary new-deck-sidebar" id="newDeckSidebar" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Neuer Stapel
+        </button>
+
+        <div class="sidebar-tip">
+          <span class="tip-icon">✦</span>
+          <p>Ein paar Minuten täglich sind besser als eine Stunde einmal pro Woche.</p>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <button class="icon-button mobile-menu" id="mobileMenu" type="button" aria-label="Menü öffnen">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+
+          <div class="topbar-copy">
+            <span class="eyebrow">Deine Lernsammlung</span>
+            <h1 id="pageTitle">Willkommen bei Wortwerk</h1>
+          </div>
+
+          <div class="save-status" id="saveStatus" aria-live="polite">
+            <span class="save-status-dot"></span>
+            <span id="saveStatusText">Lokal bereit</span>
+          </div>
+
+          <button class="button button-primary" id="topbarAction" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span id="topbarActionLabel">Stapel erstellen</span>
+          </button>
+        </header>
+
+        <aside class="pwa-install-card" id="pwaInstallCard" hidden>
+          <img src="icons/icon-192.png" alt="" width="56" height="56" />
+          <div class="pwa-message-copy">
+            <strong id="pwaInstallTitle">Wortwerk als App installieren</strong>
+            <p id="pwaInstallText">
+              Schneller starten, im eigenen Fenster lernen und offline arbeiten.
+            </p>
+          </div>
+          <div class="pwa-message-actions">
+            <button class="button button-primary button-compact" id="pwaInstallButton" type="button">
+              Installieren
+            </button>
+            <button
+              class="icon-button"
+              id="pwaInstallDismiss"
+              type="button"
+              aria-label="Installationshinweis schließen"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+        </aside>
+
+        <section class="content-area" id="contentArea" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <div class="mobile-backdrop" id="mobileBackdrop"></div>
+
+    <aside class="pwa-update-banner" id="pwaUpdateBanner" role="status" aria-live="polite" hidden>
+      <div class="pwa-update-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+          <path d="M20 5v6h-6" />
+        </svg>
+      </div>
+      <p id="pwaUpdateStatus">Eine neue Wortwerk-Version ist bereit.</p>
+      <button class="button button-primary button-compact" id="pwaUpdateButton" type="button" disabled>
+        Sicher aktualisieren
+      </button>
+      <button
+        class="icon-button"
+        id="pwaUpdateDismiss"
+        type="button"
+        aria-label="Update-Hinweis schließen"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
+      </button>
+    </aside>
+
+    <div class="connection-status" id="connectionStatus" role="status" aria-live="polite" hidden></div>
+
+    <dialog class="modal" id="deckModal">
+      <form class="modal-card" id="deckForm">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow" id="deckModalEyebrow">Neue Sammlung</span>
+            <h2 id="deckModalTitle">Stapel erstellen</h2>
+          </div>
+          <button class="icon-button close-modal" type="button" data-close="deckModal" aria-label="Schließen">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+
+        <label class="field">
+          <span>Name des Stapels</span>
+          <input
+            id="deckName"
+            name="deckName"
+            type="text"
+            maxlength="40"
+            placeholder="z. B. Englisch – Reisen"
+            autocomplete="off"
+            required
+          />
+        </label>
+
+        <label class="field">
+          <span>Beschreibung <em>optional</em></span>
+          <textarea
+            id="deckDescription"
+            name="deckDescription"
+            maxlength="120"
+            rows="3"
+            placeholder="Worum geht es in diesem Stapel?"
+          ></textarea>
+        </label>
+
+        <div class="modal-actions">
+          <button class="button button-ghost" type="button" data-close="deckModal">Abbrechen</button>
+          <button class="button button-primary" id="deckSubmitButton" type="submit">Stapel erstellen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="cardModal">
+      <form class="modal-card" id="cardForm">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow" id="cardModalEyebrow">Neue Vokabel</span>
+            <h2 id="cardModalTitle">Karte hinzufügen</h2>
+          </div>
+          <button class="icon-button close-modal" type="button" data-close="cardModal" aria-label="Schließen">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+
+        <label class="field">
+          <span>Vorderseite</span>
+          <input
+            id="cardFront"
+            name="cardFront"
+            type="text"
+            maxlength="80"
+            placeholder="z. B. journey"
+            autocomplete="off"
+            required
+          />
+        </label>
+
+        <label class="field">
+          <span>Rückseite</span>
+          <input
+            id="cardBack"
+            name="cardBack"
+            type="text"
+            maxlength="80"
+            placeholder="z. B. Reise"
+            autocomplete="off"
+            required
+          />
+        </label>
+
+        <label class="field">
+          <span>Kleiner Denkanstoß <em>optional</em></span>
+          <input
+            id="cardHint"
+            name="cardHint"
+            type="text"
+            maxlength="100"
+            placeholder="z. B. beginnt mit J …"
+            autocomplete="off"
+          />
+          <small class="field-help">Nur eine kleine Spur – nicht schon die Lösung verraten.</small>
+        </label>
+
+        <div class="modal-actions">
+          <button class="button button-ghost" type="button" data-close="cardModal">Abbrechen</button>
+          <button class="button button-primary" id="cardSubmitButton" type="submit">Karte hinzufügen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal import-preview-modal" id="importPreviewModal">
+      <form class="modal-card import-preview-card" id="importPreviewForm">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">Sicher importieren</span>
+            <h2>Importvorschau</h2>
+          </div>
+          <button
+            class="icon-button close-modal"
+            type="button"
+            data-close="importPreviewModal"
+            aria-label="Schließen"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+
+        <div id="importPreviewContent"></div>
+
+        <div class="modal-actions">
+          <button class="button button-ghost" type="button" data-close="importPreviewModal">Abbrechen</button>
+          <button class="button button-primary" id="importConfirmButton" type="submit">
+            Import bestätigen
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <input
+      id="importFile"
+      type="file"
+      accept=".json,.csv,application/json,text/csv"
+      hidden
+    />
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="storage.js"></script>
+    <script src="pwa.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
