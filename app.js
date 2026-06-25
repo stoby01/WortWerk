@@ -1,7 +1,11 @@
 (async function startWortwerk() {
 const FALLBACK_STORAGE_KEY = "wortwerk-data-v4-fallback";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
+const APP_VERSION = "0.6.1";
+const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 1600;
+const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const SCHEDULER_VERSION = "wortwerk-simple-v1";
 const DEFAULT_SETTINGS = {
   newCardsPerDay: 10,
@@ -46,6 +50,8 @@ const state = {
   editingCardId: null,
   searchQuery: "",
   sortOrder: "newest",
+  cardTagFilter: "",
+  cardMetaFilter: "all",
   statsRange: 30,
   undoReview: null,
   trash: storageResult.trash.sort((a, b) => Date.parse(b.deletedAt) - Date.parse(a.deletedAt)),
@@ -54,6 +60,7 @@ const state = {
   validationReport: null,
   lastRepairReport: null,
   importPreview: null,
+  cardImageDraft: null,
   storageMode,
   study: null,
 };
@@ -76,6 +83,17 @@ const elements = {
   cardFront: document.querySelector("#cardFront"),
   cardBack: document.querySelector("#cardBack"),
   cardHint: document.querySelector("#cardHint"),
+  cardTags: document.querySelector("#cardTags"),
+  cardMarked: document.querySelector("#cardMarked"),
+  cardDifficulty: document.querySelector("#cardDifficulty"),
+  cardImage: document.querySelector("#cardImage"),
+  cardImageAlt: document.querySelector("#cardImageAlt"),
+  cardImagePreview: document.querySelector("#cardImagePreview"),
+  cardImagePreviewImg: document.querySelector("#cardImagePreviewImg"),
+  cardImagePreviewName: document.querySelector("#cardImagePreviewName"),
+  cardImagePreviewInfo: document.querySelector("#cardImagePreviewInfo"),
+  cardImageRemove: document.querySelector("#cardImageRemove"),
+  cardDuplicateWarning: document.querySelector("#cardDuplicateWarning"),
   deckModalEyebrow: document.querySelector("#deckModalEyebrow"),
   deckModalTitle: document.querySelector("#deckModalTitle"),
   deckSubmitButton: document.querySelector("#deckSubmitButton"),
@@ -171,6 +189,12 @@ function normalizeCard(card) {
     front: typeof card.front === "string" ? card.front : "",
     back: typeof card.back === "string" ? card.back : "",
     hint: typeof card.hint === "string" ? card.hint : "",
+    tags: normalizeTags(card.tags),
+    marked: card.marked === true,
+    difficulty: ["auto", "easy", "medium", "hard"].includes(card.difficulty)
+      ? card.difficulty
+      : "auto",
+    image: normalizeCardImage(card.image),
     createdAt,
     updatedAt: validDateString(card.updatedAt) ? card.updatedAt : createdAt,
     learning: {
@@ -182,6 +206,37 @@ function normalizeCard(card) {
       lapseCount: Math.max(0, numberOr(learning.lapseCount, 0)),
       lastReviewedAt: validDateString(learning.lastReviewedAt) ? learning.lastReviewedAt : null,
     },
+  };
+}
+
+function normalizeTags(value) {
+  const rawTags = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[,;]/) : [];
+  const unique = new Map();
+  rawTags.forEach((tag) => {
+    const cleaned = String(tag ?? "").trim().replace(/\s+/g, " ").slice(0, 40);
+    if (!cleaned) return;
+    const key = cleaned.toLocaleLowerCase("de");
+    if (!unique.has(key)) unique.set(key, cleaned);
+  });
+  return [...unique.values()].slice(0, 20);
+}
+
+function normalizeCardImage(image) {
+  if (!image) return null;
+  const source = typeof image === "string" ? { dataUrl: image } : image;
+  if (
+    typeof source.dataUrl !== "string" ||
+    !/^data:image\/(?:jpeg|png|webp|gif);base64,/i.test(source.dataUrl)
+  ) {
+    return null;
+  }
+  return {
+    dataUrl: source.dataUrl,
+    mimeType: SUPPORTED_IMAGE_TYPES.includes(source.mimeType) ? source.mimeType : "image/webp",
+    width: Math.max(0, Math.round(numberOr(source.width, 0))),
+    height: Math.max(0, Math.round(numberOr(source.height, 0))),
+    originalName: typeof source.originalName === "string" ? source.originalName.slice(0, 120) : "Kartenbild",
+    alt: typeof source.alt === "string" ? source.alt.slice(0, 120) : "",
   };
 }
 
@@ -270,6 +325,7 @@ function icon(name) {
     learn: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3H6.5A2.5 2.5 0 0 0 4 20.5v-15Z" /><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H14v18a3 3 0 0 1 3-3h.5a2.5 2.5 0 0 1 2.5 2.5v-15Z" />',
     next: '<path d="m9 18 6-6-6-6" />',
     search: '<circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" />',
+    star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />',
     settings:
       '<circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" />',
     shuffle: '<path d="M4 7h3c4 0 6 10 10 10h3" /><path d="m17 14 3 3-3 3M4 17h3c1.5 0 2.7-1.4 3.8-3M14 7c1-1.2 2-2 3-2h3" /><path d="m17 2 3 3-3 3" />',
@@ -508,22 +564,50 @@ function renderDeck(deck) {
 }
 
 function renderCardManagement(deck) {
+  const tags = [...new Set(deck.cards.flatMap((card) => card.tags))]
+    .sort((a, b) => a.localeCompare(b, "de"));
   return `
     <div class="cards-toolbar">
       <label class="search-field">
         ${icon("search")}
         <input id="cardSearch" type="search" placeholder="Karten durchsuchen …" value="${escapeHtml(state.searchQuery)}" />
       </label>
-      <label class="sort-field">
-        <span>Sortieren</span>
+      <div class="card-filter-group">
+        <label class="sort-field">
+          <span>Tag</span>
+          <select id="cardTagFilter">
+            <option value="">Alle Tags</option>
+            ${tags
+              .map(
+                (tag) =>
+                  `<option value="${escapeHtml(tag)}" ${state.cardTagFilter === tag ? "selected" : ""}>${escapeHtml(tag)}</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+        <label class="sort-field">
+          <span>Auswahl</span>
+          <select id="cardMetaFilter">
+            <option value="all" ${state.cardMetaFilter === "all" ? "selected" : ""}>Alle Karten</option>
+            <option value="marked" ${state.cardMetaFilter === "marked" ? "selected" : ""}>Nur markierte</option>
+            <option value="easy" ${state.cardMetaFilter === "easy" ? "selected" : ""}>Leicht</option>
+            <option value="medium" ${state.cardMetaFilter === "medium" ? "selected" : ""}>Mittel</option>
+            <option value="hard" ${state.cardMetaFilter === "hard" ? "selected" : ""}>Schwer</option>
+            <option value="images" ${state.cardMetaFilter === "images" ? "selected" : ""}>Mit Bild</option>
+          </select>
+        </label>
+        <label class="sort-field">
+          <span>Sortieren</span>
         <select id="cardSort">
           <option value="newest" ${state.sortOrder === "newest" ? "selected" : ""}>Neueste zuerst</option>
           <option value="oldest" ${state.sortOrder === "oldest" ? "selected" : ""}>Älteste zuerst</option>
           <option value="front" ${state.sortOrder === "front" ? "selected" : ""}>Vorderseite A–Z</option>
           <option value="back" ${state.sortOrder === "back" ? "selected" : ""}>Rückseite A–Z</option>
           <option value="due" ${state.sortOrder === "due" ? "selected" : ""}>Nächste Wiederholung</option>
+          <option value="difficulty" ${state.sortOrder === "difficulty" ? "selected" : ""}>Schwierige zuerst</option>
         </select>
-      </label>
+        </label>
+      </div>
     </div>
     <div id="cardListHost">${renderCardList(deck)}</div>
   `;
@@ -531,15 +615,28 @@ function renderCardManagement(deck) {
 
 function renderCardList(deck) {
   const query = state.searchQuery.trim().toLocaleLowerCase("de");
-  const cards = deck.cards.filter((card) =>
-    [card.front, card.back, card.hint].some((value) => value.toLocaleLowerCase("de").includes(query)),
-  );
+  const cards = deck.cards.filter((card) => {
+    const matchesQuery = [card.front, card.back, card.hint, card.image?.alt, ...card.tags]
+      .some((value) => String(value ?? "").toLocaleLowerCase("de").includes(query));
+    const matchesTag = !state.cardTagFilter || card.tags.includes(state.cardTagFilter);
+    const difficulty = getEffectiveDifficulty(card);
+    const matchesMeta =
+      state.cardMetaFilter === "all" ||
+      (state.cardMetaFilter === "marked" && card.marked) ||
+      (state.cardMetaFilter === "images" && card.image) ||
+      state.cardMetaFilter === difficulty;
+    return matchesQuery && matchesTag && matchesMeta;
+  });
 
   const sorted = [...cards].sort((a, b) => {
     if (state.sortOrder === "oldest") return Date.parse(a.createdAt) - Date.parse(b.createdAt);
     if (state.sortOrder === "front") return a.front.localeCompare(b.front, "de");
     if (state.sortOrder === "back") return a.back.localeCompare(b.back, "de");
     if (state.sortOrder === "due") return Date.parse(a.learning.dueAt) - Date.parse(b.learning.dueAt);
+    if (state.sortOrder === "difficulty") {
+      const weight = { hard: 3, medium: 2, easy: 1, unknown: 0 };
+      return weight[getEffectiveDifficulty(b)] - weight[getEffectiveDifficulty(a)];
+    }
     return Date.parse(b.createdAt) - Date.parse(a.createdAt);
   });
 
@@ -557,22 +654,44 @@ function renderCardList(deck) {
       </div>
       ${sorted
         .map(
-          (card) => `
-            <article class="card-row">
+          (card) => {
+            const difficulty = getEffectiveDifficulty(card);
+            return `
+            <article class="card-row difficulty-${difficulty}">
               <div class="vocab-side vocab-front">
                 <span class="vocab-label">Vorderseite</span>
-                <span class="vocab-text">${escapeHtml(card.front)}</span>
+                <div class="vocab-front-content">
+                  ${
+                    card.image
+                      ? `<img class="card-thumbnail" src="${card.image.dataUrl}" alt="${escapeHtml(card.image.alt)}" />`
+                      : ""
+                  }
+                  <span class="vocab-text">${escapeHtml(card.front || card.image?.alt || "Bildkarte")}</span>
+                </div>
                 ${card.hint ? `<small class="card-hint-preview">Denkanstoß: ${escapeHtml(card.hint)}</small>` : ""}
+                ${renderTagList(card.tags)}
               </div>
               <div class="vocab-side vocab-back">
                 <span class="vocab-label">Rückseite</span>
                 <span class="vocab-text">${escapeHtml(card.back)}</span>
               </div>
               <div class="learning-state">
-                <span class="learning-badge ${card.learning.status}">${learningStatusLabel(card.learning.status)}</span>
+                <div class="card-state-badges">
+                  <span class="difficulty-badge ${difficulty}">
+                    <i aria-hidden="true"></i>${difficultyLabel(difficulty)}
+                  </span>
+                  <span class="learning-badge ${card.learning.status}">${learningStatusLabel(card.learning.status)}</span>
+                </div>
                 <small>${dueLabel(card)}</small>
               </div>
               <div class="row-actions">
+                <button
+                  class="mark-card ${card.marked ? "active" : ""}"
+                  type="button"
+                  data-toggle-marked="${card.id}"
+                  aria-label="${card.marked ? "Markierung entfernen" : "Karte markieren"}"
+                  title="${card.marked ? "Markierung entfernen" : "Markieren"}"
+                >${icon("star")}</button>
                 <button class="edit-card" type="button" data-edit-card-id="${card.id}" aria-label="Karte bearbeiten" title="Bearbeiten">
                   ${icon("edit")}
                 </button>
@@ -581,11 +700,47 @@ function renderCardList(deck) {
                 </button>
               </div>
             </article>
-          `,
+          `;
+          },
         )
         .join("")}
     </div>
   `;
+}
+
+function renderTagList(tags) {
+  if (!tags.length) return "";
+  return `<span class="tag-list">${tags
+    .map((tag) => `<span class="tag-chip">${escapeHtml(tag)}</span>`)
+    .join("")}</span>`;
+}
+
+function calculateAutoDifficulty(card) {
+  const reviews = state.reviewLog.filter((entry) => entry.cardId === card.id);
+  if (reviews.length < 2) return "unknown";
+
+  const incorrect = reviews.filter((entry) => entry.rating === "again").length;
+  const hard = reviews.filter((entry) => entry.rating === "hard").length;
+  const averageMs =
+    reviews.reduce((sum, entry) => sum + Math.max(0, numberOr(entry.responseTimeMs, 0)), 0) /
+    reviews.length;
+  const score =
+    (incorrect / reviews.length) * 2 +
+    (hard / reviews.length) +
+    (averageMs > 18000 ? 0.65 : averageMs > 10000 ? 0.3 : 0) +
+    (card.learning.lapseCount >= 3 ? 0.5 : 0);
+
+  if (score >= 1.25) return "hard";
+  if (score >= 0.48) return "medium";
+  return "easy";
+}
+
+function getEffectiveDifficulty(card) {
+  return card.difficulty === "auto" ? calculateAutoDifficulty(card) : card.difficulty;
+}
+
+function difficultyLabel(value) {
+  return { easy: "Leicht", medium: "Mittel", hard: "Schwer", unknown: "Noch offen" }[value] ?? "Noch offen";
 }
 
 function learningStatusLabel(status) {
@@ -1265,11 +1420,17 @@ function validateCurrentData() {
         errors.push(`Karte ${cardIndex + 1} in „${deck.name}“ besitzt keine eindeutige ID.`);
       }
       cardIds.add(card.id);
-      if (!card.front?.trim() || !card.back?.trim()) {
+      if ((!card.front?.trim() && !card.image) || !card.back?.trim()) {
         errors.push(`Eine Karte in „${deck.name}“ hat eine leere Vorder- oder Rückseite.`);
       }
+      if (!Array.isArray(card.tags)) {
+        errors.push(`Die Tags von „${card.front || card.image?.alt || "Bildkarte"}“ sind ungültig.`);
+      }
+      if (!["auto", "easy", "medium", "hard"].includes(card.difficulty)) {
+        errors.push(`Die Schwierigkeit von „${card.front || card.image?.alt || "Bildkarte"}“ ist ungültig.`);
+      }
       if (!validDateString(card.learning?.dueAt)) {
-        errors.push(`Die Fälligkeit von „${card.front || "Unbenannte Karte"}“ ist ungültig.`);
+        errors.push(`Die Fälligkeit von „${card.front || card.image?.alt || "Unbenannte Karte"}“ ist ungültig.`);
       }
     });
   });
@@ -1704,6 +1865,7 @@ function renderStudy() {
   const percent = total ? Math.round((completedCount / total) * 100) : 0;
   const response = state.study.responses[card.id];
   const preview = getSchedulePreview(card);
+  const difficulty = getEffectiveDifficulty(card);
 
   elements.contentArea.innerHTML = `
     <section class="study-view">
@@ -1731,6 +1893,18 @@ function renderStudy() {
         >${icon("back")}</button>
 
         <div class="study-card-wrap">
+          <div class="study-card-meta">
+            <span class="difficulty-badge ${difficulty}">
+              <i aria-hidden="true"></i>${difficultyLabel(difficulty)}
+            </span>
+            ${renderTagList(card.tags)}
+            <button
+              class="study-mark-button ${card.marked ? "active" : ""}"
+              data-toggle-marked="${card.id}"
+              type="button"
+              aria-label="${card.marked ? "Markierung entfernen" : "Karte markieren"}"
+            >${icon("star")}</button>
+          </div>
           <button
             class="study-card ${state.study.flipped ? "flipped" : ""}"
             data-study-action="flip"
@@ -1740,7 +1914,12 @@ function renderStudy() {
               <span class="study-card-inner">
               <span class="study-card-face study-card-front" aria-hidden="${state.study.flipped}">
                 <span class="card-side-label">Vorderseite</span>
-                <strong>${escapeHtml(card.front)}</strong>
+                ${
+                  card.image
+                    ? `<img class="study-card-image" src="${card.image.dataUrl}" alt="${escapeHtml(card.image.alt)}" />`
+                    : ""
+                }
+                ${card.front ? `<strong class="${card.image ? "with-image" : ""}">${escapeHtml(card.front)}</strong>` : ""}
                 <span class="flip-prompt">${icon("flip")} Antwort zeigen</span>
               </span>
               <span class="study-card-face study-card-back" aria-hidden="${!state.study.flipped}">
@@ -2072,6 +2251,8 @@ function openCardModal(cardId = null) {
 
   state.editingCardId = cardId;
   elements.cardForm.reset();
+  state.cardImageDraft = null;
+  elements.cardDuplicateWarning.hidden = true;
 
   if (cardId) {
     const card = deck.cards.find((item) => item.id === cardId);
@@ -2082,14 +2263,160 @@ function openCardModal(cardId = null) {
     elements.cardFront.value = card.front;
     elements.cardBack.value = card.back;
     elements.cardHint.value = card.hint;
+    elements.cardTags.value = card.tags.join(", ");
+    elements.cardMarked.checked = card.marked;
+    elements.cardDifficulty.value = card.difficulty;
+    elements.cardImageAlt.value = card.image?.alt ?? "";
+    state.cardImageDraft = card.image ? structuredClone(card.image) : null;
   } else {
     elements.cardModalEyebrow.textContent = "Neue Vokabel";
     elements.cardModalTitle.textContent = "Karte hinzufügen";
     elements.cardSubmitButton.textContent = "Karte hinzufügen";
   }
 
+  renderCardImagePreview();
   elements.cardModal.showModal();
   requestAnimationFrame(() => elements.cardFront.focus());
+}
+
+function renderCardImagePreview() {
+  const image = state.cardImageDraft;
+  elements.cardImagePreview.hidden = !image;
+  if (!image) {
+    elements.cardImagePreviewImg.removeAttribute("src");
+    elements.cardImagePreviewInfo.textContent = "";
+    return;
+  }
+
+  elements.cardImagePreviewImg.src = image.dataUrl;
+  elements.cardImagePreviewImg.alt = image.alt || "Vorschau des Kartenbildes";
+  elements.cardImagePreviewName.textContent = image.originalName || "Kartenbild";
+  elements.cardImagePreviewInfo.textContent =
+    image.width && image.height
+      ? `${image.width} × ${image.height} Pixel · optimiert gespeichert`
+      : "Optimiert gespeichert";
+}
+
+async function processCardImage(file) {
+  if (!file) return null;
+  if (!SUPPORTED_IMAGE_TYPES.includes(file.type)) {
+    throw new Error("Unterstützt werden JPG, PNG, WebP und GIF.");
+  }
+  if (file.size > MAX_IMAGE_FILE_SIZE) {
+    throw new Error("Das Bild ist größer als 5 MB.");
+  }
+
+  const sourceUrl = await readFileAsDataUrl(file);
+  const image = await loadImage(sourceUrl);
+  const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: true });
+  if (!context) throw new Error("Das Bild konnte nicht verarbeitet werden.");
+  context.drawImage(image, 0, 0, width, height);
+
+  let mimeType = "image/webp";
+  let dataUrl = canvas.toDataURL(mimeType, 0.82);
+  if (!dataUrl.startsWith("data:image/webp")) {
+    mimeType = "image/jpeg";
+    dataUrl = canvas.toDataURL(mimeType, 0.86);
+  }
+
+  return {
+    dataUrl,
+    mimeType,
+    width,
+    height,
+    originalName: file.name.slice(0, 120),
+    alt: elements.cardImageAlt.value.trim(),
+  };
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(new Error("Die Bilddatei konnte nicht gelesen werden.")));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener("load", () => resolve(image));
+    image.addEventListener("error", () => reject(new Error("Die Bilddatei ist beschädigt oder nicht lesbar.")));
+    image.src = url;
+  });
+}
+
+function comparableText(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase("de")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function findCardDuplicate(deck, candidate, excludeId = null) {
+  const front = comparableText(candidate.front);
+  const back = comparableText(candidate.back);
+
+  for (const card of deck.cards) {
+    if (card.id === excludeId) continue;
+    const cardFront = comparableText(card.front);
+    const cardBack = comparableText(card.back);
+    const sameImage =
+      candidate.image?.dataUrl &&
+      card.image?.dataUrl &&
+      candidate.image.dataUrl === card.image.dataUrl;
+
+    if ((front && front === cardFront && back === cardBack) || (sameImage && back === cardBack)) {
+      return { type: "exact", card };
+    }
+    if (front && back && front === cardBack && back === cardFront) {
+      return { type: "reversed", card };
+    }
+    if (front && front === cardFront) {
+      return { type: "same-front", card };
+    }
+  }
+  return null;
+}
+
+function duplicateMessage(duplicate) {
+  if (!duplicate) return "";
+  const label = duplicate.card.front || duplicate.card.image?.alt || "Bildkarte";
+  if (duplicate.type === "exact") {
+    return `Diese Karte ist bereits vorhanden: „${label}“.`;
+  }
+  if (duplicate.type === "reversed") {
+    return `Vorder- und Rückseite existieren bereits in umgekehrter Reihenfolge bei „${label}“.`;
+  }
+  return `Die Vorderseite „${label}“ ist bereits vorhanden, besitzt dort aber eine andere Rückseite.`;
+}
+
+function updateDuplicateWarning() {
+  const deck = getActiveDeck();
+  if (!deck) return;
+  const duplicate = findCardDuplicate(
+    deck,
+    {
+      front: elements.cardFront.value,
+      back: elements.cardBack.value,
+      image: state.cardImageDraft,
+    },
+    state.editingCardId,
+  );
+  elements.cardDuplicateWarning.hidden = !duplicate;
+  elements.cardDuplicateWarning.innerHTML = duplicate
+    ? `${icon("warning")}<span>${escapeHtml(duplicateMessage(duplicate))}</span>`
+    : "";
 }
 
 function closeDialog(dialog) {
@@ -2145,13 +2472,30 @@ function saveDeckFromForm(event) {
   render();
 }
 
-function saveCardFromForm(event) {
+async function saveCardFromForm(event) {
   event.preventDefault();
   const deck = getActiveDeck();
   const front = elements.cardFront.value.trim();
   const back = elements.cardBack.value.trim();
   const hint = elements.cardHint.value.trim();
-  if (!deck || !front || !back) return;
+  const tags = normalizeTags(elements.cardTags.value);
+  const marked = elements.cardMarked.checked;
+  const difficulty = elements.cardDifficulty.value;
+  const image = state.cardImageDraft
+    ? { ...state.cardImageDraft, alt: elements.cardImageAlt.value.trim() }
+    : null;
+  if (!deck || (!front && !image) || !back) {
+    showToast("Bitte gib Text oder ein Bild für die Vorderseite und eine Erklärung für die Rückseite an.", "error");
+    return;
+  }
+
+  const duplicate = findCardDuplicate(deck, { front, back, image }, state.editingCardId);
+  if (
+    duplicate &&
+    !window.confirm(`${duplicateMessage(duplicate)} Möchtest du die Karte trotzdem speichern?`)
+  ) {
+    return;
+  }
 
   const now = new Date().toISOString();
   if (state.editingCardId) {
@@ -2160,6 +2504,10 @@ function saveCardFromForm(event) {
     card.front = front;
     card.back = back;
     card.hint = hint;
+    card.tags = tags;
+    card.marked = marked;
+    card.difficulty = difficulty;
+    card.image = image;
     card.updatedAt = now;
     showToast("Karte wurde aktualisiert.");
   } else {
@@ -2168,6 +2516,10 @@ function saveCardFromForm(event) {
       front,
       back,
       hint,
+      tags,
+      marked,
+      difficulty,
+      image,
       createdAt: now,
       updatedAt: now,
       learning: {
@@ -2187,6 +2539,7 @@ function saveCardFromForm(event) {
   saveData();
   closeDialog(elements.cardModal);
   state.editingCardId = null;
+  state.cardImageDraft = null;
   render();
 }
 
@@ -2280,8 +2633,17 @@ function exportActiveDeckCsv() {
   if (!deck) return;
 
   const rows = [
-    ["Stapel", "Vorderseite", "Rückseite", "Hinweis"],
-    ...deck.cards.map((card) => [deck.name, card.front, card.back, card.hint]),
+    ["Stapel", "Vorderseite", "Rückseite", "Hinweis", "Tags", "Markiert", "Schwierigkeit", "Bild"],
+    ...deck.cards.map((card) => [
+      deck.name,
+      card.front,
+      card.back,
+      card.hint,
+      card.tags.join(", "),
+      card.marked ? "Ja" : "Nein",
+      card.difficulty,
+      card.image ? "In JSON-Sicherung enthalten" : "",
+    ]),
   ];
   const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\r\n")}`;
   downloadBlob(csv, `${safeFilename(deck.name)}-${fileDate()}.csv`, "text/csv;charset=utf-8");
@@ -2364,6 +2726,9 @@ function prepareCsvImport(text, filename) {
       back: findHeader(headers, ["rückseite", "rueckseite", "back", "antwort"]),
       hint: findHeader(headers, ["hinweis", "denkanstoß", "denkanstoss", "hint"]),
       deck: findHeader(headers, ["stapel", "deck"]),
+      tags: findHeader(headers, ["tags", "tag", "kategorien", "kategorie"]),
+      marked: findHeader(headers, ["markiert", "marked", "favorit", "stern"]),
+      difficulty: findHeader(headers, ["schwierigkeit", "difficulty", "stufe"]),
     },
   };
   renderImportPreview();
@@ -2384,10 +2749,14 @@ function inspectImportedJson(raw, imported) {
 
   imported.decks.forEach((deck) => {
     if (!deck.name.trim()) errors.push("Ein Stapel hat keinen Namen.");
+    const seen = new Set();
     deck.cards.forEach((card) => {
-      if (!card.front.trim() || !card.back.trim()) {
+      if ((!card.front.trim() && !card.image) || !card.back.trim()) {
         errors.push(`Eine Karte im Stapel „${deck.name}“ besitzt eine leere Seite.`);
       }
+      const key = `${comparableText(card.front)}\u0000${comparableText(card.back)}`;
+      if (seen.has(key)) warnings.push(`Im Stapel „${deck.name}“ befinden sich doppelte Karten.`);
+      seen.add(key);
     });
   });
 
@@ -2436,6 +2805,9 @@ function renderImportPreview() {
         ${mappingSelect("Rückseite", "back", preview.headers, mapping.back, true)}
         ${mappingSelect("Stapel", "deck", preview.headers, mapping.deck, false)}
         ${mappingSelect("Hinweis", "hint", preview.headers, mapping.hint, false)}
+        ${mappingSelect("Tags", "tags", preview.headers, mapping.tags, false)}
+        ${mappingSelect("Markiert", "marked", preview.headers, mapping.marked, false)}
+        ${mappingSelect("Schwierigkeit", "difficulty", preview.headers, mapping.difficulty, false)}
       </div>
       <div class="import-table-wrap">
         <table class="import-table">
@@ -2541,12 +2913,28 @@ async function confirmImport(event) {
 function applyCsvImport(rows, mapping) {
   let importedCount = 0;
   let skippedCount = 0;
+  let duplicateCount = 0;
   const fallbackDeckName = getActiveDeck()?.name ?? `CSV-Import ${new Date().toLocaleDateString("de-DE")}`;
 
   rows.forEach((row) => {
     const front = (row[mapping.front] ?? "").trim();
     const back = (row[mapping.back] ?? "").trim();
     const hint = mapping.hint >= 0 ? (row[mapping.hint] ?? "").trim() : "";
+    const tags = mapping.tags >= 0 ? normalizeTags(row[mapping.tags] ?? "") : [];
+    const markedValue = mapping.marked >= 0 ? comparableText(row[mapping.marked] ?? "") : "";
+    const marked = ["ja", "yes", "true", "1", "markiert", "favorit"].includes(markedValue);
+    const rawDifficulty = mapping.difficulty >= 0 ? comparableText(row[mapping.difficulty] ?? "") : "";
+    const difficulty =
+      {
+        leicht: "easy",
+        easy: "easy",
+        mittel: "medium",
+        medium: "medium",
+        schwer: "hard",
+        hard: "hard",
+        automatisch: "auto",
+        auto: "auto",
+      }[rawDifficulty] ?? "auto";
     const deckName =
       mapping.deck >= 0 && row[mapping.deck]?.trim() ? row[mapping.deck].trim() : fallbackDeckName;
     if (!front || !back) {
@@ -2568,18 +2956,26 @@ function applyCsvImport(rows, mapping) {
       state.decks.unshift(deck);
     }
 
-    const duplicate = deck.cards.some(
-      (card) =>
-        card.front.trim().toLocaleLowerCase("de") === front.toLocaleLowerCase("de") &&
-        card.back.trim().toLocaleLowerCase("de") === back.toLocaleLowerCase("de"),
-    );
-    if (duplicate) {
+    const duplicate = findCardDuplicate(deck, { front, back, image: null });
+    if (duplicate && ["exact", "reversed"].includes(duplicate.type)) {
       skippedCount += 1;
+      duplicateCount += 1;
       return;
     }
 
     const now = new Date().toISOString();
-    deck.cards.push(normalizeCard({ id: createId(), front, back, hint, createdAt: now }));
+    deck.cards.push(
+      normalizeCard({
+        id: createId(),
+        front,
+        back,
+        hint,
+        tags,
+        marked,
+        difficulty,
+        createdAt: now,
+      }),
+    );
     deck.updatedAt = now;
     importedCount += 1;
   });
@@ -2587,7 +2983,7 @@ function applyCsvImport(rows, mapping) {
   state.activeDeckId = state.decks.find(
     (deck) => deck.name.toLocaleLowerCase("de") === fallbackDeckName.toLocaleLowerCase("de"),
   )?.id ?? state.decks[0]?.id;
-  return { importedCount, skippedCount };
+  return { importedCount, skippedCount, duplicateCount };
 }
 
 function findHeader(headers, names) {
@@ -2776,6 +3172,39 @@ elements.deckForm.addEventListener("submit", saveDeckFromForm);
 elements.cardForm.addEventListener("submit", saveCardFromForm);
 elements.importPreviewForm.addEventListener("submit", confirmImport);
 elements.importFile.addEventListener("change", () => importFile(elements.importFile.files[0]));
+elements.cardImage.addEventListener("change", async () => {
+  const file = elements.cardImage.files[0];
+  if (!file) return;
+  elements.cardImage.disabled = true;
+  elements.cardSubmitButton.disabled = true;
+  try {
+    state.cardImageDraft = await processCardImage(file);
+    renderCardImagePreview();
+    updateDuplicateWarning();
+    showToast("Bild wurde verkleinert und für die Karte vorbereitet.");
+  } catch (error) {
+    elements.cardImage.value = "";
+    showToast(error.message, "error");
+  } finally {
+    elements.cardImage.disabled = false;
+    elements.cardSubmitButton.disabled = false;
+  }
+});
+elements.cardImageRemove.addEventListener("click", () => {
+  state.cardImageDraft = null;
+  elements.cardImage.value = "";
+  renderCardImagePreview();
+  updateDuplicateWarning();
+});
+elements.cardImageAlt.addEventListener("input", () => {
+  if (state.cardImageDraft) {
+    state.cardImageDraft.alt = elements.cardImageAlt.value.trim();
+    renderCardImagePreview();
+  }
+});
+[elements.cardFront, elements.cardBack].forEach((input) => {
+  input.addEventListener("input", updateDuplicateWarning);
+});
 
 elements.deckList.addEventListener("click", (event) => {
   const deckButton = event.target.closest("[data-deck-id]");
@@ -2784,11 +3213,29 @@ elements.deckList.addEventListener("click", (event) => {
   state.view = "deck";
   state.study = null;
   state.searchQuery = "";
+  state.cardTagFilter = "";
+  state.cardMetaFilter = "all";
   closeMobileMenu();
   render();
 });
 
 elements.contentArea.addEventListener("click", (event) => {
+  const markedButton = event.target.closest("[data-toggle-marked]");
+  if (markedButton) {
+    const cardId = markedButton.dataset.toggleMarked;
+    const deck = state.decks.find((item) => item.cards.some((card) => card.id === cardId));
+    const card = deck?.cards.find((item) => item.id === cardId);
+    if (!card) return;
+    card.marked = !card.marked;
+    card.updatedAt = new Date().toISOString();
+    deck.updatedAt = card.updatedAt;
+    saveData();
+    if (state.view === "study") renderStudy();
+    else render();
+    showToast(card.marked ? "Karte wurde markiert." : "Markierung wurde entfernt.");
+    return;
+  }
+
   const restoreTrashButton = event.target.closest("[data-restore-trash]");
   if (restoreTrashButton) {
     restoreTrashEntry(restoreTrashButton.dataset.restoreTrash);
@@ -2880,8 +3327,10 @@ elements.contentArea.addEventListener("change", (event) => {
     return;
   }
 
-  if (event.target.id !== "cardSort") return;
-  state.sortOrder = event.target.value;
+  if (!["cardSort", "cardTagFilter", "cardMetaFilter"].includes(event.target.id)) return;
+  if (event.target.id === "cardSort") state.sortOrder = event.target.value;
+  if (event.target.id === "cardTagFilter") state.cardTagFilter = event.target.value;
+  if (event.target.id === "cardMetaFilter") state.cardMetaFilter = event.target.value;
   const deck = getActiveDeck();
   const host = document.querySelector("#cardListHost");
   if (deck && host) host.innerHTML = renderCardList(deck);
@@ -2929,7 +3378,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 window.WortwerkApp = Object.freeze({
-  version: "0.5.1",
+  version: APP_VERSION,
   createUpdateBackup,
 });
 

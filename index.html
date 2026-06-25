@@ -16,7 +16,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=0.6.1" />
   </head>
   <body>
     <div class="app-launch-screen" id="appLaunchScreen" role="status" aria-live="polite">
@@ -209,7 +209,7 @@
       </form>
     </dialog>
 
-    <dialog class="modal" id="cardModal">
+    <dialog class="modal card-editor-modal" id="cardModal">
       <form class="modal-card" id="cardForm">
         <div class="modal-header">
           <div>
@@ -224,7 +224,7 @@
         </div>
 
         <label class="field">
-          <span>Vorderseite</span>
+          <span>Vorderseite <em>optional bei einem Bild</em></span>
           <input
             id="cardFront"
             name="cardFront"
@@ -232,21 +232,57 @@
             maxlength="80"
             placeholder="z. B. journey"
             autocomplete="off"
-            required
+          />
+        </label>
+
+        <div class="field">
+          <span>Bild auf der Vorderseite <em>optional</em></span>
+          <div class="image-upload-box">
+            <input
+              id="cardImage"
+              name="cardImage"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+            />
+            <label class="image-upload-button" for="cardImage">
+              Bild auswählen
+            </label>
+            <small>JPG, PNG, WebP oder GIF · maximal 5 MB · wird automatisch verkleinert</small>
+          </div>
+          <div class="card-image-preview" id="cardImagePreview" hidden>
+            <img id="cardImagePreviewImg" alt="Vorschau des Kartenbildes" />
+            <div>
+              <strong id="cardImagePreviewName">Kartenbild</strong>
+              <small id="cardImagePreviewInfo"></small>
+              <button class="button button-compact button-danger-ghost" id="cardImageRemove" type="button">
+                Bild entfernen
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Bildbeschreibung <em>für Barrierefreiheit</em></span>
+          <input
+            id="cardImageAlt"
+            name="cardImageAlt"
+            type="text"
+            maxlength="120"
+            placeholder="z. B. Ein roter Apfel auf einem Tisch"
+            autocomplete="off"
           />
         </label>
 
         <label class="field">
-          <span>Rückseite</span>
-          <input
+          <span>Rückseite / Erklärung</span>
+          <textarea
             id="cardBack"
             name="cardBack"
-            type="text"
-            maxlength="80"
-            placeholder="z. B. Reise"
-            autocomplete="off"
+            maxlength="300"
+            rows="3"
+            placeholder="z. B. Reise – eine Fahrt von einem Ort zu einem anderen"
             required
-          />
+          ></textarea>
         </label>
 
         <label class="field">
@@ -261,6 +297,40 @@
           />
           <small class="field-help">Nur eine kleine Spur – nicht schon die Lösung verraten.</small>
         </label>
+
+        <label class="field">
+          <span>Tags <em>durch Kommas getrennt</em></span>
+          <input
+            id="cardTags"
+            name="cardTags"
+            type="text"
+            maxlength="240"
+            placeholder="z. B. Reisen, B2, Verb"
+            autocomplete="off"
+          />
+          <small class="field-help">Tags helfen später beim Suchen und Zusammenstellen eigener Übungsrunden.</small>
+        </label>
+
+        <div class="card-properties-grid">
+          <label class="field">
+            <span>Schwierigkeit</span>
+            <select id="cardDifficulty" name="cardDifficulty">
+              <option value="auto">Automatisch bestimmen</option>
+              <option value="easy">Leicht · Grün</option>
+              <option value="medium">Mittel · Gelb</option>
+              <option value="hard">Schwer · Rot</option>
+            </select>
+          </label>
+
+          <label class="mark-card-control">
+            <input id="cardMarked" name="cardMarked" type="checkbox" />
+            <span aria-hidden="true">★</span>
+            <strong>Karte markieren</strong>
+            <small>Für späteres gezieltes Üben</small>
+          </label>
+        </div>
+
+        <div class="duplicate-warning" id="cardDuplicateWarning" role="status" hidden></div>
 
         <div class="modal-actions">
           <button class="button button-ghost" type="button" data-close="cardModal">Abbrechen</button>
@@ -309,7 +379,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="storage.js"></script>
-    <script src="pwa.js"></script>
-    <script src="app.js"></script>
+    <script src="pwa.js?v=0.6.1"></script>
+    <script src="app.js?v=0.6.1"></script>
   </body>
 </html>

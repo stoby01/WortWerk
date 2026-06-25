@@ -731,6 +731,12 @@ h3 {
   margin-bottom: 16px;
 }
 
+.card-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .search-field {
   display: flex;
   min-width: 230px;
@@ -830,6 +836,7 @@ h3 {
 }
 
 .card-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 155px 78px;
   gap: 24px;
@@ -837,6 +844,29 @@ h3 {
   min-height: 78px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--line);
+}
+
+.card-row::before {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 0;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: #b7beb9;
+  content: "";
+}
+
+.card-row.difficulty-easy::before {
+  background: #53a66f;
+}
+
+.card-row.difficulty-medium::before {
+  background: #ddb13d;
+}
+
+.card-row.difficulty-hard::before {
+  background: #cf5b55;
 }
 
 .card-row:last-child {
@@ -873,6 +903,41 @@ h3 {
   font-weight: 600;
 }
 
+.vocab-front-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-thumbnail {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--surface-soft);
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 2px 7px;
+  border: 1px solid rgba(49, 92, 75, 0.13);
+  border-radius: 999px;
+  color: var(--primary);
+  background: rgba(228, 239, 233, 0.65);
+  font-size: 9px;
+  font-weight: 700;
+}
+
 .vocab-back .vocab-text {
   color: var(--text-soft);
   font-weight: 500;
@@ -890,6 +955,43 @@ h3 {
 
 .learning-state {
   min-width: 0;
+}
+
+.card-state-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.difficulty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--text-soft);
+  background: var(--surface-soft);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.difficulty-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #aab1ad;
+}
+
+.difficulty-badge.easy i {
+  background: #53a66f;
+}
+
+.difficulty-badge.medium i {
+  background: #ddb13d;
+}
+
+.difficulty-badge.hard i {
+  background: #cf5b55;
 }
 
 .learning-state small {
@@ -930,7 +1032,8 @@ h3 {
 }
 
 .edit-card,
-.delete-card {
+.delete-card,
+.mark-card {
   display: grid;
   width: 36px;
   height: 36px;
@@ -941,6 +1044,15 @@ h3 {
   cursor: pointer;
   background: transparent;
   transition: color 150ms ease, background 150ms ease;
+}
+
+.mark-card.active {
+  color: #c28c18;
+  background: #fff5d8;
+}
+
+.mark-card.active svg {
+  fill: currentColor;
 }
 
 .edit-card {
@@ -1027,12 +1139,18 @@ h3 {
 
 .modal {
   width: min(92vw, 520px);
+  max-height: calc(100dvh - 24px);
   padding: 0;
+  overflow: hidden;
   border: 0;
   border-radius: 22px;
   color: var(--text);
-  background: transparent;
+  background: var(--surface);
   box-shadow: 0 30px 80px rgba(23, 32, 28, 0.2);
+}
+
+.card-editor-modal {
+  width: min(94vw, 680px);
 }
 
 .modal::backdrop {
@@ -1041,7 +1159,10 @@ h3 {
 }
 
 .modal-card {
+  max-height: calc(100dvh - 24px);
   padding: 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
 }
 
@@ -1079,7 +1200,8 @@ h3 {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1094,6 +1216,12 @@ h3 {
   padding: 0 14px;
 }
 
+.field select {
+  width: 100%;
+  height: 48px;
+  padding: 0 38px 0 14px;
+}
+
 .field textarea {
   min-height: 90px;
   padding: 13px 14px;
@@ -1101,10 +1229,156 @@ h3 {
 }
 
 .field input:focus,
-.field textarea:focus {
+.field textarea:focus,
+.field select:focus {
   border-color: var(--primary);
   background: var(--surface);
   box-shadow: 0 0 0 3px rgba(49, 92, 75, 0.1);
+}
+
+.image-upload-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+  padding: 13px;
+  border: 1px dashed #cbd4ce;
+  border-radius: 13px;
+  background: var(--surface-soft);
+}
+
+.image-upload-box input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.image-upload-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border-radius: 10px;
+  color: white;
+  cursor: pointer;
+  background: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.image-upload-box small {
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.card-image-preview {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+}
+
+.card-image-preview[hidden] {
+  display: none;
+}
+
+.card-image-preview img {
+  width: 110px;
+  height: 82px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--surface-soft);
+}
+
+.card-image-preview strong,
+.card-image-preview small {
+  display: block;
+}
+
+.card-image-preview small {
+  margin: 4px 0 9px;
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.card-properties-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.mark-card-control {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-content: center;
+  min-height: 81px;
+  margin-bottom: 19px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  cursor: pointer;
+  background: var(--surface-soft);
+}
+
+.mark-card-control input {
+  position: absolute;
+  opacity: 0;
+}
+
+.mark-card-control > span {
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: #aeb4b0;
+  font-size: 23px;
+}
+
+.mark-card-control:has(input:checked) {
+  border-color: #e4c46a;
+  background: #fff9e8;
+}
+
+.mark-card-control:has(input:checked) > span {
+  color: #c28c18;
+}
+
+.mark-card-control strong {
+  font-size: 12px;
+}
+
+.mark-card-control small {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.duplicate-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 2px;
+  padding: 11px 13px;
+  border: 1px solid #edcf8a;
+  border-radius: 12px;
+  color: #76561d;
+  background: #fff8e4;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.duplicate-warning[hidden] {
+  display: none;
+}
+
+.duplicate-warning svg {
+  width: 17px;
+  flex: 0 0 auto;
 }
 
 .field input::placeholder,
@@ -2505,6 +2779,43 @@ h3 {
   perspective: 1400px;
 }
 
+.study-card-meta {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  margin: 0 8px 9px;
+}
+
+.study-card-meta .tag-list {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+}
+
+.study-mark-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text-soft);
+  cursor: pointer;
+  background: var(--surface);
+}
+
+.study-mark-button.active {
+  border-color: #ead083;
+  color: #c28c18;
+  background: #fff9e8;
+}
+
+.study-mark-button.active svg {
+  fill: currentColor;
+}
+
 .study-card {
   display: block;
   width: 100%;
@@ -2595,6 +2906,22 @@ h3 {
   font-size: clamp(32px, 5vw, 50px);
   letter-spacing: -0.04em;
   line-height: 1.14;
+}
+
+.study-card-face strong.with-image {
+  margin-top: 15px;
+  font-size: clamp(22px, 3vw, 32px);
+}
+
+.study-card-image {
+  position: relative;
+  z-index: 1;
+  width: min(78%, 420px);
+  max-height: 220px;
+  border-radius: 18px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 35px rgba(15, 29, 23, 0.18);
 }
 
 .flip-prompt {
@@ -3032,6 +3359,15 @@ h3 {
     flex-direction: column;
   }
 
+  .card-filter-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .card-filter-group .sort-field:last-child {
+    grid-column: 1 / -1;
+  }
+
   .search-field {
     max-width: none;
   }
@@ -3077,6 +3413,14 @@ h3 {
 
   .modal-card {
     padding: 23px 20px;
+  }
+
+  .card-properties-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mark-card-control {
+    margin-top: -8px;
   }
 
   .modal-actions .button {

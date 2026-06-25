@@ -2,6 +2,7 @@
 
 **Stand:** 25.06.2026  
 **Vorheriger Stand:** `Lokale_Datensicherheit_24.06.2026.md`
+**Nächster Stand:** `Erweiterte_Karten_25.06.2026.md`
 
 ## Ziel dieses Entwicklungsschritts
 
