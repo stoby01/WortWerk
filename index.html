@@ -16,7 +16,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=0.6.2" />
+    <link rel="stylesheet" href="styles.css?v=0.6.3" />
   </head>
   <body class="auth-pending">
     <div class="app-launch-screen" id="appLaunchScreen" role="status" aria-live="polite">
@@ -99,6 +99,17 @@
             <span class="save-status-dot"></span>
             <span id="saveStatusText">Lokal bereit</span>
           </div>
+
+          <button class="account-switch" id="accountSwitch" type="button" aria-label="Benutzer wechseln">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21a8 8 0 0 1 16 0" />
+            </svg>
+            <span>
+              <small>Eingeloggt als</small>
+              <strong>Benutzer</strong>
+            </span>
+          </button>
 
           <button class="button button-primary" id="topbarAction" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -379,7 +390,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="storage.js"></script>
-    <script src="pwa.js?v=0.6.2"></script>
-    <script src="app.js?v=0.6.2"></script>
+    <script src="pwa.js?v=0.6.3"></script>
+    <script src="app.js?v=0.6.3"></script>
   </body>
 </html>

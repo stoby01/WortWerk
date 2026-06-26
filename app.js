@@ -1,11 +1,14 @@
 (async function startWortwerk() {
 document.body.classList.add("auth-pending");
 const FALLBACK_STORAGE_KEY = "wortwerk-data-v4-fallback";
-const AUTH_STORAGE_KEY = "wortwerk-local-account-v1";
+const LEGACY_AUTH_STORAGE_KEY = "wortwerk-local-account-v1";
+const AUTH_STORAGE_KEY = "wortwerk-local-accounts-v1";
 const AUTH_SESSION_KEY = "wortwerk-local-account-session";
+const AUTH_LAST_USER_KEY = "wortwerk-local-account-last-user";
+const DEFAULT_USER_DATABASE = "WortwerkDB";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.2";
+const APP_VERSION = "0.6.3";
 const PASSWORD_HASH_ITERATIONS = 210000;
 const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1600;
@@ -17,37 +20,13 @@ const DEFAULT_SETTINGS = {
   dailyMinutesGoal: 10,
 };
 
-const legacyResult = loadLegacyData();
-const fallbackData = {
-  ...normalizeData(legacyResult.data),
-  sourceKey: legacyResult.sourceKey,
-};
 let storageMode = "indexeddb";
-let storageResult;
-
-try {
-  storageResult = await window.WortwerkStorage.initialize(fallbackData, SCHEMA_VERSION);
-} catch (error) {
-  storageMode = "localstorage-fallback";
-  storageResult = {
-    data: fallbackData,
-    trash: [],
-    backups: [],
-    migrationReport: {
-      performed: false,
-      source: legacyResult.sourceKey,
-      error: String(error),
-    },
-    database: null,
-  };
-}
-
-const loadedData = normalizeData(storageResult.data);
+let activeFallbackStorageKey = FALLBACK_STORAGE_KEY;
 
 const state = {
-  decks: loadedData.decks,
-  reviewLog: loadedData.reviewLog,
-  settings: loadedData.settings,
+  decks: [],
+  reviewLog: [],
+  settings: { ...DEFAULT_SETTINGS },
   activeDeckId: null,
   view: "welcome",
   editingDeckId: null,
@@ -58,9 +37,9 @@ const state = {
   cardMetaFilter: "all",
   statsRange: 30,
   undoReview: null,
-  trash: storageResult.trash.sort((a, b) => Date.parse(b.deletedAt) - Date.parse(a.deletedAt)),
-  backups: storageResult.backups.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
-  migrationReport: storageResult.migrationReport,
+  trash: [],
+  backups: [],
+  migrationReport: null,
   validationReport: null,
   lastRepairReport: null,
   importPreview: null,
@@ -113,6 +92,7 @@ const elements = {
   toast: document.querySelector("#toast"),
   saveStatus: document.querySelector("#saveStatus"),
   saveStatusText: document.querySelector("#saveStatusText"),
+  accountSwitch: document.querySelector("#accountSwitch"),
   sidebar: document.querySelector("#sidebar"),
   mobileMenu: document.querySelector("#mobileMenu"),
   mobileBackdrop: document.querySelector("#mobileBackdrop"),
@@ -121,21 +101,33 @@ const elements = {
 let toastTimer;
 let saveStatusTimer;
 
-function loadLegacyData() {
+function fallbackStorageKeyFor(account) {
+  if (!account || account.databaseName === DEFAULT_USER_DATABASE) return FALLBACK_STORAGE_KEY;
+  return `${FALLBACK_STORAGE_KEY}-${account.id}`;
+}
+
+function emptyStoredData() {
+  return { decks: [], reviewLog: [], settings: { ...DEFAULT_SETTINGS } };
+}
+
+function loadLegacyData(account) {
+  const fallbackKey = fallbackStorageKeyFor(account);
   try {
-    for (const legacyKey of LEGACY_STORAGE_KEYS) {
-      const legacy = localStorage.getItem(legacyKey);
-      if (legacy) return { data: JSON.parse(legacy), sourceKey: legacyKey };
+    if (!account || account.databaseName === DEFAULT_USER_DATABASE) {
+      for (const legacyKey of LEGACY_STORAGE_KEYS) {
+        const legacy = localStorage.getItem(legacyKey);
+        if (legacy) return { data: JSON.parse(legacy), sourceKey: legacyKey };
+      }
     }
 
-    const fallback = localStorage.getItem(FALLBACK_STORAGE_KEY);
-    if (fallback) return { data: JSON.parse(fallback), sourceKey: FALLBACK_STORAGE_KEY };
+    const fallback = localStorage.getItem(fallbackKey);
+    if (fallback) return { data: JSON.parse(fallback), sourceKey: fallbackKey };
   } catch {
     return { data: null, sourceKey: "beschädigter Browser-Speicher" };
   }
 
   return {
-    data: { decks: [], reviewLog: [], settings: { ...DEFAULT_SETTINGS } },
+    data: emptyStoredData(),
     sourceKey: "leere Sammlung",
   };
 }
@@ -261,7 +253,7 @@ async function saveData() {
       await window.WortwerkStorage.persistData(currentData(), SCHEMA_VERSION);
     } else {
       localStorage.setItem(
-        FALLBACK_STORAGE_KEY,
+        activeFallbackStorageKey,
         JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...currentData() }),
       );
     }
@@ -273,6 +265,64 @@ async function saveData() {
     showToast("Speichern fehlgeschlagen. Bitte erstelle vorsichtshalber eine Sicherung.", "error");
     return false;
   }
+}
+
+async function loadAccountData(account) {
+  activeFallbackStorageKey = fallbackStorageKeyFor(account);
+  const legacyResult = loadLegacyData(account);
+  const fallbackData = {
+    ...normalizeData(legacyResult.data),
+    sourceKey: legacyResult.sourceKey,
+  };
+
+  let nextStorageMode = "indexeddb";
+  let storageResult;
+
+  try {
+    storageResult = await window.WortwerkStorage.initialize(
+      fallbackData,
+      SCHEMA_VERSION,
+      account.databaseName,
+    );
+  } catch (error) {
+    nextStorageMode = "localstorage-fallback";
+    storageResult = {
+      data: fallbackData,
+      trash: [],
+      backups: [],
+      migrationReport: {
+        performed: false,
+        source: legacyResult.sourceKey,
+        error: String(error),
+      },
+      database: null,
+    };
+  }
+
+  const loadedData = normalizeData(storageResult.data);
+  storageMode = nextStorageMode;
+  state.decks = loadedData.decks;
+  state.reviewLog = loadedData.reviewLog;
+  state.settings = loadedData.settings;
+  state.activeDeckId = null;
+  state.view = "welcome";
+  state.editingDeckId = null;
+  state.editingCardId = null;
+  state.searchQuery = "";
+  state.sortOrder = "newest";
+  state.cardTagFilter = "";
+  state.cardMetaFilter = "all";
+  state.statsRange = 30;
+  state.undoReview = null;
+  state.trash = storageResult.trash.sort((a, b) => Date.parse(b.deletedAt) - Date.parse(a.deletedAt));
+  state.backups = storageResult.backups.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  state.migrationReport = storageResult.migrationReport;
+  state.validationReport = null;
+  state.lastRepairReport = null;
+  state.importPreview = null;
+  state.cardImageDraft = null;
+  state.storageMode = nextStorageMode;
+  state.study = null;
 }
 
 function setSaveStatus(status) {
@@ -359,33 +409,101 @@ function authIsSupported() {
   return Boolean(globalThis.crypto?.subtle && globalThis.crypto?.getRandomValues && globalThis.TextEncoder);
 }
 
-function readAuthRecord() {
+function normalizeAuthRecord(record, index = 0) {
+  if (
+    typeof record?.username !== "string" ||
+    typeof record?.salt !== "string" ||
+    typeof record?.hash !== "string"
+  ) {
+    return null;
+  }
+
+  const id =
+    typeof record.id === "string" && record.id
+      ? record.id
+      : index === 0
+        ? "default-user"
+        : createId();
+
+  return {
+    id,
+    username: record.username.trim() || "Benutzer",
+    salt: record.salt,
+    hash: record.hash,
+    iterations: Number(record.iterations) || PASSWORD_HASH_ITERATIONS,
+    databaseName:
+      typeof record.databaseName === "string" && record.databaseName
+        ? record.databaseName
+        : index === 0
+          ? DEFAULT_USER_DATABASE
+          : userDatabaseName(id),
+    createdAt: validDateString(record.createdAt) ? record.createdAt : null,
+    updatedAt: validDateString(record.updatedAt) ? record.updatedAt : null,
+  };
+}
+
+function userDatabaseName(userId) {
+  return `WortwerkDB_${String(userId).replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+}
+
+function readAuthAccounts() {
   try {
-    const rawRecord = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!rawRecord) return null;
-    const record = JSON.parse(rawRecord);
-    if (
-      typeof record?.username !== "string" ||
-      typeof record?.salt !== "string" ||
-      typeof record?.hash !== "string"
-    ) {
-      return null;
+    const rawAccounts = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (rawAccounts) {
+      const parsed = JSON.parse(rawAccounts);
+      const source = Array.isArray(parsed) ? parsed : parsed?.accounts;
+      if (Array.isArray(source)) {
+        const accounts = source.map(normalizeAuthRecord).filter(Boolean);
+        if (accounts.length) return accounts;
+      }
     }
-    return {
-      username: record.username,
-      salt: record.salt,
-      hash: record.hash,
-      iterations: Number(record.iterations) || PASSWORD_HASH_ITERATIONS,
-      createdAt: validDateString(record.createdAt) ? record.createdAt : null,
-      updatedAt: validDateString(record.updatedAt) ? record.updatedAt : null,
-    };
+
+    const legacyRawRecord = localStorage.getItem(LEGACY_AUTH_STORAGE_KEY);
+    if (!legacyRawRecord) return [];
+    const legacyRecord = normalizeAuthRecord(JSON.parse(legacyRawRecord), 0);
+    if (!legacyRecord) return [];
+    const accounts = [legacyRecord];
+    writeAuthAccounts(accounts);
+    return accounts;
+  } catch {
+    return [];
+  }
+}
+
+function writeAuthAccounts(accounts) {
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ version: 1, accounts }));
+}
+
+function readAuthRecord(userId = state.authUser?.id) {
+  const accounts = readAuthAccounts();
+  if (userId) return accounts.find((account) => account.id === userId) ?? null;
+  const lastUserId = readLastUserId();
+  return accounts.find((account) => account.id === lastUserId) ?? accounts[0] ?? null;
+}
+
+function upsertAuthRecord(record) {
+  const accounts = readAuthAccounts();
+  const index = accounts.findIndex((account) => account.id === record.id);
+  if (index >= 0) accounts[index] = record;
+  else accounts.push(record);
+  writeAuthAccounts(accounts);
+  return record;
+}
+
+function readLastUserId() {
+  try {
+    return localStorage.getItem(AUTH_LAST_USER_KEY);
   } catch {
     return null;
   }
 }
 
-function writeAuthRecord(record) {
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(record));
+function rememberLastUser(record) {
+  try {
+    localStorage.setItem(AUTH_LAST_USER_KEY, record.id);
+  } catch {
+    // Ohne localStorage wird beim naechsten Start der erste lokale Benutzer vorgeschlagen.
+  }
 }
 
 function bytesToBase64(bytes) {
@@ -451,7 +569,7 @@ async function verifyPassword(password, record) {
 }
 
 function sessionKeyFor(record) {
-  return `${record.username}:${record.hash}`;
+  return `${record.id}:${record.hash}`;
 }
 
 function authSessionIsValid(record) {
@@ -493,9 +611,13 @@ function authButtonLabel(mode) {
   return "Anmelden";
 }
 
-function renderAuthOverlay(mode = "login", message = "") {
+function renderAuthOverlay(mode = "login", message = "", selectedUserId = readLastUserId()) {
   document.querySelector("#authOverlay")?.remove();
-  const record = readAuthRecord();
+  const accounts = readAuthAccounts();
+  const record =
+    mode === "change"
+      ? readAuthRecord()
+      : accounts.find((account) => account.id === selectedUserId) ?? accounts[0] ?? null;
   const overlay = document.createElement("section");
   overlay.className = "auth-overlay";
   overlay.id = "authOverlay";
@@ -596,32 +718,100 @@ function renderAuthOverlay(mode = "login", message = "") {
   `;
 
   document.body.append(overlay);
-  const firstInput = overlay.querySelector("input");
+  if (isSetup) {
+    const heading = overlay.querySelector("h2");
+    const copy = overlay.querySelector(".auth-copy");
+    if (heading) heading.textContent = "Lokales Konto anlegen";
+    if (copy) copy.textContent = "Lege ein neues lokales Profil mit eigener Lernsammlung an.";
+  } else if (!isChange) {
+    const heading = overlay.querySelector("h2");
+    const copy = overlay.querySelector(".auth-copy");
+    if (heading) heading.textContent = "Benutzer wechseln";
+    if (copy) copy.textContent = "Waehle einen Benutzer und gib das passende Passwort ein.";
+  }
+
+  if (isSetup) {
+    const usernameInput = overlay.querySelector('input[name="username"]');
+    if (usernameInput) usernameInput.value = "";
+  }
+
+  if (!isSetup && !isChange && accounts.length) {
+    const usernameField = overlay.querySelector('input[name="username"]')?.closest(".field");
+    if (usernameField) {
+      usernameField.outerHTML = `
+        <label class="field">
+          <span>Benutzer</span>
+          <select name="userId" autocomplete="username" required>
+            ${accounts
+              .map(
+                (account) => `
+                  <option value="${escapeHtml(account.id)}" ${account.id === record?.id ? "selected" : ""}>
+                    ${escapeHtml(account.username)}
+                  </option>
+                `,
+              )
+              .join("")}
+          </select>
+        </label>
+      `;
+    }
+
+    const actions = overlay.querySelector(".auth-actions");
+    actions?.insertAdjacentHTML(
+      "afterbegin",
+      `<button class="button button-ghost" data-auth-create type="button">${icon("add")} Neues Konto</button>`,
+    );
+  }
+
+  const firstInput = overlay.querySelector("select, input");
   window.setTimeout(() => firstInput?.focus(), 60);
 
   overlay.querySelector("#authForm").addEventListener("submit", handleAuthSubmit);
   overlay.querySelector("[data-auth-cancel]")?.addEventListener("click", () => overlay.remove());
+  overlay.querySelector("[data-auth-create]")?.addEventListener("click", () => renderAuthOverlay("setup"));
 }
 
 function unlockApp(record) {
   state.authUser = {
+    id: record.id,
     username: record.username,
+    databaseName: record.databaseName,
     createdAt: record.createdAt,
   };
+  rememberLastUser(record);
   document.body.classList.remove("auth-pending");
   document.body.classList.add("auth-ready");
   document.querySelector("#authOverlay")?.remove();
+  renderAccountChip();
 }
 
-async function createAuthRecord(username, password) {
+async function finishAccountActivation(record, message = "") {
+  await loadAccountData(record);
+  rememberAuthSession(record);
+  unlockApp(record);
+  const resolver = pendingAuthResolve;
+  pendingAuthResolve = null;
+  resolver?.();
+  if (!resolver) {
+    await saveData();
+    render();
+  }
+  if (message) showToast(message);
+}
+
+async function createAuthRecord(username, password, existingAccounts = readAuthAccounts(), existingRecord = null) {
   const now = new Date().toISOString();
   const salt = createPasswordSalt();
+  const id = existingRecord?.id ?? createId();
   return {
+    id,
     username: username.trim().slice(0, 40),
     salt,
     hash: await hashPassword(password, salt),
     iterations: PASSWORD_HASH_ITERATIONS,
-    createdAt: now,
+    databaseName:
+      existingRecord?.databaseName ?? (existingAccounts.length ? userDatabaseName(id) : DEFAULT_USER_DATABASE),
+    createdAt: existingRecord?.createdAt ?? now,
     updatedAt: now,
   };
 }
@@ -660,17 +850,18 @@ async function handleAuthSubmit(event) {
     if (mode === "setup") {
       if (username.length < 2) throw new Error("Der Benutzername muss mindestens 2 Zeichen lang sein.");
       validateNewPassword(password, confirmPassword);
-      const record = await createAuthRecord(username, password);
-      writeAuthRecord(record);
-      rememberAuthSession(record);
-      unlockApp(record);
-      pendingAuthResolve?.();
-      pendingAuthResolve = null;
-      showToast("Lokales Konto wurde angelegt.");
+      const accounts = readAuthAccounts();
+      if (accounts.some((account) => account.username.toLocaleLowerCase("de") === username.toLocaleLowerCase("de"))) {
+        throw new Error("Diesen Benutzernamen gibt es bereits.");
+      }
+      const record = await createAuthRecord(username, password, accounts);
+      upsertAuthRecord(record);
+      await finishAccountActivation(record, "Lokales Konto wurde angelegt.");
       return;
     }
 
-    const record = readAuthRecord();
+    const selectedUserId = String(formData.get("userId") ?? "");
+    const record = mode === "change" ? readAuthRecord() : readAuthRecord(selectedUserId);
     if (!record) {
       renderAuthOverlay("setup", "Es wurde noch kein lokales Konto gefunden.");
       return;
@@ -682,9 +873,8 @@ async function handleAuthSubmit(event) {
       if (!(await verifyPassword(currentPassword, record))) {
         throw new Error("Das aktuelle Passwort ist nicht korrekt.");
       }
-      const updatedRecord = await createAuthRecord(record.username, password);
-      updatedRecord.createdAt = record.createdAt ?? updatedRecord.createdAt;
-      writeAuthRecord(updatedRecord);
+      const updatedRecord = await createAuthRecord(record.username, password, readAuthAccounts(), record);
+      upsertAuthRecord(updatedRecord);
       rememberAuthSession(updatedRecord);
       unlockApp(updatedRecord);
       if (state.view === "security") renderSecurity();
@@ -695,12 +885,7 @@ async function handleAuthSubmit(event) {
     if (!(await verifyPassword(password, record))) {
       throw new Error("Benutzername oder Passwort ist nicht korrekt.");
     }
-    rememberAuthSession(record);
-    unlockApp(record);
-    pendingAuthResolve?.();
-    pendingAuthResolve = null;
-    render();
-    showToast("Angemeldet.");
+    await finishAccountActivation(record, "Angemeldet.");
   } catch (error) {
     setAuthStatus(error.message || "Anmeldung fehlgeschlagen.");
   } finally {
@@ -709,17 +894,27 @@ async function handleAuthSubmit(event) {
 }
 
 function initializeAccountGate() {
-  const record = readAuthRecord();
-  if (record && authSessionIsValid(record)) {
-    unlockApp(record);
-    return Promise.resolve();
+  const accounts = readAuthAccounts();
+  const sessionAccount = accounts.find((account) => authSessionIsValid(account));
+  if (sessionAccount) {
+    return finishAccountActivation(sessionAccount);
   }
 
-  renderAuthOverlay(record ? "login" : "setup");
+  const record = readAuthRecord();
+  if (!accounts.length) {
+    renderAuthOverlay("setup");
+  } else {
+    renderAuthOverlay("login", "", record?.id);
+  }
+
   dispatchAppReadyOnce();
   return new Promise((resolve) => {
     pendingAuthResolve = resolve;
   });
+}
+
+function openUserSwitch() {
+  renderAuthOverlay("login", "", state.authUser?.id ?? readLastUserId());
 }
 
 function lockApp() {
@@ -730,11 +925,17 @@ function lockApp() {
   closeDialog(elements.importPreviewModal);
   document.body.classList.add("auth-pending");
   document.body.classList.remove("auth-ready");
-  renderAuthOverlay("login");
+  renderAuthOverlay("login", "", state.authUser?.id ?? readLastUserId());
 }
 
 function openPasswordChange() {
   renderAuthOverlay("change");
+}
+
+function renderAccountChip() {
+  if (!elements.accountSwitch) return;
+  const username = state.authUser?.username ?? "Benutzer";
+  elements.accountSwitch.innerHTML = `${icon("user")}<span><small>Eingeloggt als</small><strong>${escapeHtml(username)}</strong></span>`;
 }
 
 function setTopbarAction(label, action, iconName) {
@@ -747,6 +948,7 @@ function getActiveDeck() {
 }
 
 function render() {
+  renderAccountChip();
   renderDeckNavigation();
   elements.statisticsNav.classList.toggle("active", state.view === "statistics");
   elements.securityNav.classList.toggle("active", state.view === "security");
@@ -3600,6 +3802,7 @@ elements.securityNav.addEventListener("click", async () => {
   render();
 });
 elements.topbarAction.addEventListener("click", () => handleAction(elements.topbarAction.dataset.action));
+elements.accountSwitch.addEventListener("click", openUserSwitch);
 elements.deckForm.addEventListener("submit", saveDeckFromForm);
 elements.cardForm.addEventListener("submit", saveCardFromForm);
 elements.importPreviewForm.addEventListener("submit", confirmImport);

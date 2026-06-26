@@ -1,5 +1,5 @@
 (function createWortwerkStorage(global) {
-  const DB_NAME = "WortwerkDB";
+  const DEFAULT_DB_NAME = "WortwerkDB";
   const DB_VERSION = 1;
   const MAX_BACKUPS = 12;
   const STORES = {
@@ -12,8 +12,19 @@
     meta: "meta",
   };
 
+  let activeDatabaseName = DEFAULT_DB_NAME;
   let databasePromise;
   let writeQueue = Promise.resolve();
+
+  function useDatabase(databaseName = DEFAULT_DB_NAME) {
+    const nextName = typeof databaseName === "string" && databaseName.trim() ? databaseName.trim() : DEFAULT_DB_NAME;
+    if (nextName === activeDatabaseName) return;
+
+    databasePromise?.then((db) => db.close()).catch(() => {});
+    databasePromise = null;
+    writeQueue = Promise.resolve();
+    activeDatabaseName = nextName;
+  }
 
   function requestToPromise(request) {
     return new Promise((resolve, reject) => {
@@ -34,7 +45,7 @@
     if (databasePromise) return databasePromise;
 
     databasePromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      const request = indexedDB.open(activeDatabaseName, DB_VERSION);
 
       request.onupgradeneeded = () => {
         const db = request.result;
@@ -259,11 +270,12 @@
     return true;
   }
 
-  async function initialize(fallbackData, schemaVersion) {
+  async function initialize(fallbackData, schemaVersion, databaseName = DEFAULT_DB_NAME) {
     if (!("indexedDB" in global)) {
       throw new Error("IndexedDB wird von diesem Browser nicht unterstützt.");
     }
 
+    useDatabase(databaseName);
     await openDatabase();
     const meta = await getOne(STORES.meta, "database");
     let migrationReport;
@@ -297,13 +309,14 @@
       backups: await getAll(STORES.backups),
       migrationReport,
       database: {
-        name: DB_NAME,
+        name: activeDatabaseName,
         version: DB_VERSION,
       },
     };
   }
 
   global.WortwerkStorage = {
+    defaultDatabaseName: DEFAULT_DB_NAME,
     initialize,
     persistData,
     addTrash,
