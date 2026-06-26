@@ -223,7 +223,7 @@ Das ist kein Passwort und kein Sicherheitsmerkmal. Es ist nur Komfort:
 Beim naechsten Oeffnen wird derselbe Benutzer vorgeschlagen.
 ```
 
-Die aktive Sitzung liegt weiterhin in `sessionStorage`:
+In Version `0.6.3` lag die aktive Sitzung noch in `sessionStorage`:
 
 ```js
 wortwerk-local-account-session
@@ -429,3 +429,44 @@ das passende Passwort eingegeben werden.
 
 Die bestehende Sammlung bleibt beim ersten Benutzer erhalten.
 Neue Benutzer bekommen eigene, getrennte lokale Datenbanken.
+
+## Nachtrag: Wortwerk 0.6.4 - Angemeldet bleiben
+
+Nach dem ersten Mehrbenutzer-Test wurde die Sitzungslogik angepasst.
+In Version `0.6.3` lag die aktive Anmeldung in `sessionStorage`.
+Das fuehrte dazu, dass Wortwerk nach dem Schliessen der App oder des Browsers wieder ein Passwort
+verlangte.
+
+Ab Version `0.6.4` wird die aktive lokale Sitzung in `localStorage` gespeichert:
+
+```js
+localStorage.setItem(AUTH_SESSION_KEY, sessionKeyFor(record));
+```
+
+Dadurch bleibt der aktuelle Benutzer angemeldet, bis er sich bewusst abmeldet.
+
+Beim Abmelden wird die Sitzung entfernt:
+
+```js
+localStorage.removeItem(AUTH_SESSION_KEY);
+sessionStorage.removeItem(AUTH_SESSION_KEY);
+```
+
+Beim Passwortwechsel wird eine neue Sitzungsmarke geschrieben, weil sich der gespeicherte
+Passwort-Hash aendert.
+
+Die Sicherheitslogik bleibt damit:
+
+- App schliessen und wieder oeffnen: aktueller Benutzer bleibt angemeldet.
+- Benutzer wechseln: Passwort des Zielbenutzers wird verlangt.
+- Abmelden: danach ist die App wieder gesperrt.
+- Passwort aendern: alte Sitzung wird durch neue Sitzung ersetzt.
+
+Fuer die PWA wurde die Version auf `0.6.4` gesetzt:
+
+```text
+styles.css?v=0.6.4
+pwa.js?v=0.6.4
+app.js?v=0.6.4
+wortwerk-app-0.6.4
+```
