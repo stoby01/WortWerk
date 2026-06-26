@@ -8,7 +8,7 @@ const AUTH_LAST_USER_KEY = "wortwerk-local-account-last-user";
 const DEFAULT_USER_DATABASE = "WortwerkDB";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.3";
+const APP_VERSION = "0.6.4";
 const PASSWORD_HASH_ITERATIONS = 210000;
 const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1600;
@@ -574,7 +574,9 @@ function sessionKeyFor(record) {
 
 function authSessionIsValid(record) {
   try {
-    return Boolean(record && sessionStorage.getItem(AUTH_SESSION_KEY) === sessionKeyFor(record));
+    if (!record) return false;
+    const key = sessionKeyFor(record);
+    return localStorage.getItem(AUTH_SESSION_KEY) === key || sessionStorage.getItem(AUTH_SESSION_KEY) === key;
   } catch {
     return false;
   }
@@ -582,14 +584,16 @@ function authSessionIsValid(record) {
 
 function rememberAuthSession(record) {
   try {
-    sessionStorage.setItem(AUTH_SESSION_KEY, sessionKeyFor(record));
+    localStorage.setItem(AUTH_SESSION_KEY, sessionKeyFor(record));
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
   } catch {
-    // Ohne Session-Speicher muss beim Neuladen erneut angemeldet werden.
+    // Ohne lokalen Speicher muss beim Neuladen erneut angemeldet werden.
   }
 }
 
 function clearAuthSession() {
   try {
+    localStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_SESSION_KEY);
   } catch {
     // Ignorieren: Die App kann trotzdem wieder gesperrt werden.
