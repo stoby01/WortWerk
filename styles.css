@@ -3524,11 +3524,17 @@ h3 {
   }
 
   .topbar {
-    min-height: 96px;
-    padding: 20px;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    min-height: unset;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 16px 14px;
   }
 
   .topbar .button-primary {
+    grid-column: 3;
+    grid-row: 1;
     width: 44px;
     min-width: 44px;
     padding: 0;
@@ -3538,15 +3544,44 @@ h3 {
     display: none;
   }
 
+  .topbar-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .topbar-copy .eyebrow {
+    margin-bottom: 2px;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+  }
+
   .account-switch {
-    grid-template-columns: 34px;
-    max-width: 46px;
-    min-width: 46px;
-    padding: 5px;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: 30px minmax(0, 1fr);
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    min-height: 40px;
+    padding: 5px 10px 5px 5px;
+  }
+
+  .account-switch svg {
+    width: 30px;
+    height: 30px;
+    padding: 7px;
   }
 
   .account-switch span {
-    display: none;
+    display: block;
+  }
+
+  .account-switch small {
+    font-size: 8px;
+  }
+
+  .account-switch strong {
+    font-size: 12px;
   }
 
   .save-status {
@@ -3558,7 +3593,14 @@ h3 {
   }
 
   h1 {
-    font-size: 23px;
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 21px;
+    line-height: 1.12;
+    text-overflow: ellipsis;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .welcome-card {
