@@ -1,8 +1,12 @@
 (async function startWortwerk() {
+document.body.classList.add("auth-pending");
 const FALLBACK_STORAGE_KEY = "wortwerk-data-v4-fallback";
+const AUTH_STORAGE_KEY = "wortwerk-local-account-v1";
+const AUTH_SESSION_KEY = "wortwerk-local-account-session";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.1";
+const APP_VERSION = "0.6.2";
+const PASSWORD_HASH_ITERATIONS = 210000;
 const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1600;
 const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -63,6 +67,7 @@ const state = {
   cardImageDraft: null,
   storageMode,
   study: null,
+  authUser: null,
 };
 
 const elements = {
@@ -323,6 +328,10 @@ function icon(name) {
     hint: '<path d="M9 18h6M10 22h4M8.4 14.5A6 6 0 1 1 15.6 14.5c-.9.7-1.6 1.6-1.6 2.5h-4c0-.9-.7-1.8-1.6-2.5Z" />',
     import: '<path d="M12 21V9m0 0 5 5m-5-5-5 5M5 5h14" />',
     learn: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3H6.5A2.5 2.5 0 0 0 4 20.5v-15Z" /><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H14v18a3 3 0 0 1 3-3h.5a2.5 2.5 0 0 1 2.5 2.5v-15Z" />',
+    key: '<path d="M15 7a4 4 0 1 0 2.8 6.8L21 17v3h-3l-2-2h-2v-2l-1.2-1.2A4 4 0 0 0 15 7Z" /><circle cx="15" cy="11" r="1" />',
+    lock:
+      '<rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" />',
+    logout: '<path d="M10 17 15 12l-5-5M15 12H3" /><path d="M14 4h4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-4" />',
     next: '<path d="m9 18 6-6-6-6" />',
     search: '<circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" />',
     star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />',
@@ -339,10 +348,393 @@ function icon(name) {
       '<path d="M12 3 4.5 6v5.5c0 4.7 3.1 8 7.5 9.5 4.4-1.5 7.5-4.8 7.5-9.5V6L12 3Z" /><path d="m9 12 2 2 4-5" />',
     undo: '<path d="M9 7 4 12l5 5" /><path d="M4 12h9a6 6 0 0 1 6 6" />',
     upload: '<path d="M12 16V4m0 0 5 5m-5-5-5 5M5 20h14" />',
+    user: '<circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" />',
     warning:
       '<path d="M10.3 3.7 2.5 18a2 2 0 0 0 1.8 3h15.4a2 2 0 0 0 1.8-3L13.7 3.7a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" />',
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] ?? paths.cards}</svg>`;
+}
+
+function authIsSupported() {
+  return Boolean(globalThis.crypto?.subtle && globalThis.crypto?.getRandomValues && globalThis.TextEncoder);
+}
+
+function readAuthRecord() {
+  try {
+    const rawRecord = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!rawRecord) return null;
+    const record = JSON.parse(rawRecord);
+    if (
+      typeof record?.username !== "string" ||
+      typeof record?.salt !== "string" ||
+      typeof record?.hash !== "string"
+    ) {
+      return null;
+    }
+    return {
+      username: record.username,
+      salt: record.salt,
+      hash: record.hash,
+      iterations: Number(record.iterations) || PASSWORD_HASH_ITERATIONS,
+      createdAt: validDateString(record.createdAt) ? record.createdAt : null,
+      updatedAt: validDateString(record.updatedAt) ? record.updatedAt : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeAuthRecord(record) {
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(record));
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function createPasswordSalt() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return bytesToBase64(bytes);
+}
+
+async function hashPassword(password, salt, iterations = PASSWORD_HASH_ITERATIONS) {
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: base64ToBytes(salt),
+      iterations,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    256,
+  );
+  return bytesToBase64(new Uint8Array(bits));
+}
+
+function constantTimeEqual(first, second) {
+  if (typeof first !== "string" || typeof second !== "string" || first.length !== second.length) {
+    return false;
+  }
+  let mismatch = 0;
+  for (let index = 0; index < first.length; index += 1) {
+    mismatch |= first.charCodeAt(index) ^ second.charCodeAt(index);
+  }
+  return mismatch === 0;
+}
+
+async function verifyPassword(password, record) {
+  if (!record) return false;
+  const candidateHash = await hashPassword(password, record.salt, record.iterations);
+  return constantTimeEqual(candidateHash, record.hash);
+}
+
+function sessionKeyFor(record) {
+  return `${record.username}:${record.hash}`;
+}
+
+function authSessionIsValid(record) {
+  try {
+    return Boolean(record && sessionStorage.getItem(AUTH_SESSION_KEY) === sessionKeyFor(record));
+  } catch {
+    return false;
+  }
+}
+
+function rememberAuthSession(record) {
+  try {
+    sessionStorage.setItem(AUTH_SESSION_KEY, sessionKeyFor(record));
+  } catch {
+    // Ohne Session-Speicher muss beim Neuladen erneut angemeldet werden.
+  }
+}
+
+function clearAuthSession() {
+  try {
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+  } catch {
+    // Ignorieren: Die App kann trotzdem wieder gesperrt werden.
+  }
+}
+
+function setAuthStatus(message, type = "error") {
+  const status = document.querySelector("#authStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle("error", type === "error");
+  status.classList.toggle("success", type === "success");
+  status.hidden = !message;
+}
+
+function authButtonLabel(mode) {
+  if (mode === "setup") return "Konto anlegen";
+  if (mode === "change") return "Passwort ändern";
+  return "Anmelden";
+}
+
+function renderAuthOverlay(mode = "login", message = "") {
+  document.querySelector("#authOverlay")?.remove();
+  const record = readAuthRecord();
+  const overlay = document.createElement("section");
+  overlay.className = "auth-overlay";
+  overlay.id = "authOverlay";
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("role", "dialog");
+
+  const isSetup = mode === "setup";
+  const isChange = mode === "change";
+  const disabled = !authIsSupported();
+  const title = isSetup ? "Lokales Konto anlegen" : isChange ? "Passwort ändern" : "Anmelden";
+  const subtitle = isSetup
+    ? "Wähle einen Benutzernamen und ein Passwort für diese installierte Wortwerk-App."
+    : isChange
+      ? `Du änderst das Passwort für ${escapeHtml(record?.username ?? "dein lokales Konto")}.`
+      : `Willkommen zurück${record?.username ? `, ${escapeHtml(record.username)}` : ""}.`;
+
+  overlay.innerHTML = `
+    <form class="auth-card" id="authForm" data-auth-mode="${mode}">
+      <div class="auth-brand">
+        <span class="auth-brand-mark">${icon("lock")}</span>
+        <div>
+          <span class="eyebrow">Wortwerk Konto</span>
+          <h2>${title}</h2>
+        </div>
+      </div>
+      <p class="auth-copy">${subtitle}</p>
+
+      ${
+        disabled
+          ? `<div class="auth-status error">Dieser Browser unterstützt Web Crypto nicht. Die lokale Kontosperre kann hier nicht sicher gestartet werden.</div>`
+          : ""
+      }
+
+      ${
+        isChange
+          ? ""
+          : `<label class="field">
+              <span>Benutzername</span>
+              <input
+                name="username"
+                type="text"
+                maxlength="40"
+                autocomplete="username"
+                value="${escapeHtml(record?.username ?? "")}"
+                ${record && !isSetup ? "readonly" : ""}
+                required
+              />
+            </label>`
+      }
+
+      ${
+        isChange
+          ? `<label class="field">
+              <span>Aktuelles Passwort</span>
+              <input name="currentPassword" type="password" autocomplete="current-password" required />
+            </label>`
+          : ""
+      }
+
+      <label class="field">
+        <span>${isChange || isSetup ? "Neues Passwort" : "Passwort"}</span>
+        <input
+          name="password"
+          type="password"
+          minlength="${isSetup || isChange ? 8 : 1}"
+          autocomplete="${isSetup || isChange ? "new-password" : "current-password"}"
+          required
+        />
+      </label>
+
+      ${
+        isSetup || isChange
+          ? `<label class="field">
+              <span>Passwort wiederholen</span>
+              <input name="confirmPassword" type="password" minlength="8" autocomplete="new-password" required />
+            </label>`
+          : ""
+      }
+
+      <div class="auth-note">
+        ${icon("shield")}
+        <p>Das Konto gilt nur auf diesem Gerät und in diesem Browser. Für echte Online-Konten braucht Wortwerk später ein Backend.</p>
+      </div>
+
+      <div class="auth-status ${message ? "error" : ""}" id="authStatus" ${message ? "" : "hidden"}>${escapeHtml(message)}</div>
+
+      <div class="auth-actions">
+        ${
+          isChange
+            ? `<button class="button button-ghost" data-auth-cancel type="button">Abbrechen</button>`
+            : ""
+        }
+        <button class="button button-primary" type="submit" ${disabled ? "disabled" : ""}>
+          ${icon(isSetup ? "user" : isChange ? "key" : "lock")} ${authButtonLabel(mode)}
+        </button>
+      </div>
+    </form>
+  `;
+
+  document.body.append(overlay);
+  const firstInput = overlay.querySelector("input");
+  window.setTimeout(() => firstInput?.focus(), 60);
+
+  overlay.querySelector("#authForm").addEventListener("submit", handleAuthSubmit);
+  overlay.querySelector("[data-auth-cancel]")?.addEventListener("click", () => overlay.remove());
+}
+
+function unlockApp(record) {
+  state.authUser = {
+    username: record.username,
+    createdAt: record.createdAt,
+  };
+  document.body.classList.remove("auth-pending");
+  document.body.classList.add("auth-ready");
+  document.querySelector("#authOverlay")?.remove();
+}
+
+async function createAuthRecord(username, password) {
+  const now = new Date().toISOString();
+  const salt = createPasswordSalt();
+  return {
+    username: username.trim().slice(0, 40),
+    salt,
+    hash: await hashPassword(password, salt),
+    iterations: PASSWORD_HASH_ITERATIONS,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function validateNewPassword(password, confirmPassword) {
+  if (password.length < 8) {
+    throw new Error("Das Passwort muss mindestens 8 Zeichen lang sein.");
+  }
+  if (password !== confirmPassword) {
+    throw new Error("Die beiden Passwörter stimmen nicht überein.");
+  }
+}
+
+let pendingAuthResolve = null;
+let appReadyDispatched = false;
+
+function dispatchAppReadyOnce() {
+  if (appReadyDispatched) return;
+  appReadyDispatched = true;
+  window.dispatchEvent(new CustomEvent("wortwerk:ready"));
+}
+
+async function handleAuthSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submitButton = form.querySelector('button[type="submit"]');
+  const formData = new FormData(form);
+  const mode = form.dataset.authMode;
+  const username = String(formData.get("username") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  submitButton.disabled = true;
+  setAuthStatus("Wird geprüft ...", "success");
+
+  try {
+    if (mode === "setup") {
+      if (username.length < 2) throw new Error("Der Benutzername muss mindestens 2 Zeichen lang sein.");
+      validateNewPassword(password, confirmPassword);
+      const record = await createAuthRecord(username, password);
+      writeAuthRecord(record);
+      rememberAuthSession(record);
+      unlockApp(record);
+      pendingAuthResolve?.();
+      pendingAuthResolve = null;
+      showToast("Lokales Konto wurde angelegt.");
+      return;
+    }
+
+    const record = readAuthRecord();
+    if (!record) {
+      renderAuthOverlay("setup", "Es wurde noch kein lokales Konto gefunden.");
+      return;
+    }
+
+    if (mode === "change") {
+      const currentPassword = String(formData.get("currentPassword") ?? "");
+      validateNewPassword(password, confirmPassword);
+      if (!(await verifyPassword(currentPassword, record))) {
+        throw new Error("Das aktuelle Passwort ist nicht korrekt.");
+      }
+      const updatedRecord = await createAuthRecord(record.username, password);
+      updatedRecord.createdAt = record.createdAt ?? updatedRecord.createdAt;
+      writeAuthRecord(updatedRecord);
+      rememberAuthSession(updatedRecord);
+      unlockApp(updatedRecord);
+      if (state.view === "security") renderSecurity();
+      showToast("Passwort wurde geändert.");
+      return;
+    }
+
+    if (!(await verifyPassword(password, record))) {
+      throw new Error("Benutzername oder Passwort ist nicht korrekt.");
+    }
+    rememberAuthSession(record);
+    unlockApp(record);
+    pendingAuthResolve?.();
+    pendingAuthResolve = null;
+    render();
+    showToast("Angemeldet.");
+  } catch (error) {
+    setAuthStatus(error.message || "Anmeldung fehlgeschlagen.");
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
+function initializeAccountGate() {
+  const record = readAuthRecord();
+  if (record && authSessionIsValid(record)) {
+    unlockApp(record);
+    return Promise.resolve();
+  }
+
+  renderAuthOverlay(record ? "login" : "setup");
+  dispatchAppReadyOnce();
+  return new Promise((resolve) => {
+    pendingAuthResolve = resolve;
+  });
+}
+
+function lockApp() {
+  clearAuthSession();
+  state.study = null;
+  closeDialog(elements.deckModal);
+  closeDialog(elements.cardModal);
+  closeDialog(elements.importPreviewModal);
+  document.body.classList.add("auth-pending");
+  document.body.classList.remove("auth-ready");
+  renderAuthOverlay("login");
+}
+
+function openPasswordChange() {
+  renderAuthOverlay("change");
 }
 
 function setTopbarAction(label, action, iconName) {
@@ -1255,6 +1647,7 @@ function renderSecurity() {
   const report = state.validationReport ?? validateCurrentData();
   const cardCount = state.decks.reduce((sum, deck) => sum + deck.cards.length, 0);
   const storageIsIndexedDb = state.storageMode === "indexeddb";
+  const account = readAuthRecord();
   elements.pageTitle.textContent = "Datensicherheit";
   setTopbarAction("Zur Sammlung", "go-home", "back");
 
@@ -1282,6 +1675,7 @@ function renderSecurity() {
         ${securitySummaryCard("Lernprotokolle", state.reviewLog.length, "chart")}
         ${securitySummaryCard("Im Papierkorb", state.trash.length, "trash")}
         ${securitySummaryCard("Sicherungen", state.backups.length, "restore")}
+        ${securitySummaryCard("Konto", account?.username ?? "Lokal", "user")}
       </div>
 
       <div class="security-actions">
@@ -1302,6 +1696,8 @@ function renderSecurity() {
       </div>
 
       <div class="security-grid">
+        ${renderAccountPanel(account)}
+
         <article class="security-panel validation-panel">
           <div class="security-panel-header">
             <div>
@@ -1399,7 +1795,41 @@ function securitySummaryCard(label, value, iconName) {
   return `
     <article class="security-summary-card">
       <span>${icon(iconName)}</span>
-      <div><strong>${value}</strong><small>${label}</small></div>
+      <div><strong>${escapeHtml(value)}</strong><small>${label}</small></div>
+    </article>
+  `;
+}
+
+function renderAccountPanel(account) {
+  return `
+    <article class="security-panel account-panel">
+      <div class="security-panel-header">
+        <div>
+          <span class="eyebrow">Lokales Konto</span>
+          <h3>${account ? escapeHtml(account.username) : "Keine Kontosperre aktiv"}</h3>
+        </div>
+        ${icon("lock")}
+      </div>
+      <p class="security-muted">
+        Das Passwort schützt den Einstieg in diese Browser-App. Die Daten bleiben lokal gespeichert und werden nicht
+        mit GitHub Pages synchronisiert.
+      </p>
+      ${
+        account?.createdAt
+          ? `<div class="account-meta">
+              <span>${icon("calendar")} Erstellt ${formatRelativeDate(account.createdAt)}</span>
+              <span>${icon("key")} PBKDF2 · ${account.iterations.toLocaleString("de-DE")} Runden</span>
+            </div>`
+          : ""
+      }
+      <div class="account-actions">
+        <button class="button button-secondary button-compact" data-action="change-password" type="button">
+          ${icon("key")} Passwort ändern
+        </button>
+        <button class="button button-danger-ghost button-compact" data-action="logout" type="button">
+          ${icon("logout")} Abmelden
+        </button>
+      </div>
     </article>
   `;
 }
@@ -3081,6 +3511,8 @@ function handleAction(action) {
     },
     "repair-data": repairCurrentData,
     "empty-trash": emptyTrash,
+    "change-password": openPasswordChange,
+    logout: lockApp,
     import: () => elements.importFile.click(),
   };
   actions[action]?.();
@@ -3382,11 +3814,13 @@ window.WortwerkApp = Object.freeze({
   createUpdateBackup,
 });
 
+await initializeAccountGate();
 await saveData();
 render();
-window.dispatchEvent(new CustomEvent("wortwerk:ready"));
+dispatchAppReadyOnce();
 })().catch((error) => {
   console.error("Wortwerk konnte nicht gestartet werden.", error);
+  document.body.classList.remove("auth-pending");
   window.dispatchEvent(new CustomEvent("wortwerk:error", { detail: error }));
   const contentArea = document.querySelector("#contentArea");
   if (contentArea) {
