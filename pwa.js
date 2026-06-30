@@ -1,5 +1,5 @@
 (function initializeWortwerkPWA() {
-  const PWA_VERSION = "0.6.5";
+  const PWA_VERSION = "0.6.6";
   const elements = {
     launchScreen: document.querySelector("#appLaunchScreen"),
     launchStatus: document.querySelector("#appLaunchStatus"),
@@ -61,6 +61,15 @@
       () => setHidden(elements.connectionStatus, true),
       offline ? 4500 : 2200,
     );
+  }
+
+  async function lockPortraitOrientation() {
+    if (!isStandalone || !screen.orientation?.lock) return;
+    try {
+      await screen.orientation.lock("portrait");
+    } catch {
+      // Einige Browser erlauben Orientation Lock nur in installierten/fullscreen Apps.
+    }
   }
 
   function installCardWasDismissed() {
@@ -208,6 +217,7 @@
   window.addEventListener("wortwerk:ready", () => {
     appReady = true;
     if (elements.updateButton) elements.updateButton.disabled = !waitingWorker;
+    lockPortraitOrientation();
     window.setTimeout(hideLaunchScreen, 160);
 
     if (!isStandalone && isAppleMobile && window.isSecureContext) {
@@ -216,6 +226,9 @@
   });
 
   window.addEventListener("wortwerk:error", showLaunchError);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") lockPortraitOrientation();
+  });
 
   navigator.serviceWorker?.addEventListener("controllerchange", () => {
     if (reloadStarted) return;
