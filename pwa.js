@@ -1,5 +1,5 @@
 (function initializeWortwerkPWA() {
-  const PWA_VERSION = "0.6.6";
+  const PWA_VERSION = "0.6.7";
   const elements = {
     launchScreen: document.querySelector("#appLaunchScreen"),
     launchStatus: document.querySelector("#appLaunchStatus"),
@@ -64,7 +64,7 @@
   }
 
   async function lockPortraitOrientation() {
-    if (!isStandalone || !screen.orientation?.lock) return;
+    if (!screen.orientation?.lock) return;
     try {
       await screen.orientation.lock("portrait");
     } catch {
@@ -229,6 +229,8 @@
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") lockPortraitOrientation();
   });
+  window.addEventListener("orientationchange", () => window.setTimeout(lockPortraitOrientation, 120));
+  window.addEventListener("resize", () => window.setTimeout(lockPortraitOrientation, 120));
 
   navigator.serviceWorker?.addEventListener("controllerchange", () => {
     if (reloadStarted) return;

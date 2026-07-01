@@ -8,7 +8,7 @@ const AUTH_LAST_USER_KEY = "wortwerk-local-account-last-user";
 const DEFAULT_USER_DATABASE = "WortwerkDB";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.6";
+const APP_VERSION = "0.6.7";
 const PASSWORD_HASH_ITERATIONS = 210000;
 const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1600;
@@ -2502,6 +2502,8 @@ function renderStudy() {
   const response = state.study.responses[card.id];
   const preview = getSchedulePreview(card);
   const difficulty = getEffectiveDifficulty(card);
+  const frontTextFit = cardTextFitClass(card.front, Boolean(card.image));
+  const backTextFit = cardTextFitClass(card.back, false);
 
   elements.contentArea.innerHTML = `
     <section class="study-view">
@@ -2555,12 +2557,16 @@ function renderStudy() {
                     ? `<img class="study-card-image" src="${card.image.dataUrl}" alt="${escapeHtml(card.image.alt)}" />`
                     : ""
                 }
-                ${card.front ? `<strong class="${card.image ? "with-image" : ""}">${escapeHtml(card.front)}</strong>` : ""}
+                ${
+                  card.front
+                    ? `<strong class="${[card.image ? "with-image" : "", frontTextFit].filter(Boolean).join(" ")}">${escapeHtml(card.front)}</strong>`
+                    : ""
+                }
                 <span class="flip-prompt">${icon("flip")} Antwort zeigen</span>
               </span>
               <span class="study-card-face study-card-back" aria-hidden="${!state.study.flipped}">
                 <span class="card-side-label">Rückseite</span>
-                <strong>${escapeHtml(card.back)}</strong>
+                <strong class="${backTextFit}">${escapeHtml(card.back)}</strong>
                 <span class="flip-prompt">${icon("flip")} Frage zeigen</span>
               </span>
             </span>
@@ -2646,6 +2652,19 @@ function ratingLabel(rating) {
     easy: "Sofort gewusst",
     practice: "Frei geübt",
   }[rating];
+}
+
+function cardTextFitClass(value, hasImage = false) {
+  const text = String(value ?? "").trim();
+  const characterCount = [...text].length;
+  const wordCount = text ? text.split(/\s+/).length : 0;
+  const score = characterCount + wordCount * 7 + (hasImage ? 55 : 0);
+
+  if (score > 520) return "text-fit-ultra";
+  if (score > 340) return "text-fit-dense";
+  if (score > 210) return "text-fit-long";
+  if (score > 120) return "text-fit-medium";
+  return "text-fit-short";
 }
 
 function getSchedulePreview(card) {
