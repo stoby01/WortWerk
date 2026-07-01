@@ -8,7 +8,7 @@ const AUTH_LAST_USER_KEY = "wortwerk-local-account-last-user";
 const DEFAULT_USER_DATABASE = "WortwerkDB";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.7";
+const APP_VERSION = "0.6.8";
 const PASSWORD_HASH_ITERATIONS = 210000;
 const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1600;
@@ -2660,10 +2660,10 @@ function cardTextFitClass(value, hasImage = false) {
   const wordCount = text ? text.split(/\s+/).length : 0;
   const score = characterCount + wordCount * 7 + (hasImage ? 55 : 0);
 
-  if (score > 520) return "text-fit-ultra";
-  if (score > 340) return "text-fit-dense";
-  if (score > 210) return "text-fit-long";
-  if (score > 120) return "text-fit-medium";
+  if (score > 430) return "text-fit-ultra";
+  if (score > 240) return "text-fit-dense";
+  if (score > 130) return "text-fit-long";
+  if (score > 70) return "text-fit-medium";
   return "text-fit-short";
 }
 
@@ -3374,6 +3374,7 @@ function prepareCsvImport(text, filename) {
   state.importPreview = {
     type: "csv",
     filename,
+    targetDeckId: state.view === "deck" ? state.activeDeckId : null,
     headers: originalHeaders,
     rows: rows.slice(1),
     mapping: {
@@ -3450,15 +3451,21 @@ function renderImportPreview() {
   } else {
     const mapping = preview.mapping;
     const sampleRows = preview.rows.slice(0, 5);
+    const targetDeck = preview.targetDeckId ? state.decks.find((deck) => deck.id === preview.targetDeckId) : null;
     elements.importPreviewContent.innerHTML = `
       <div class="import-file-summary">
         ${icon("cards")}
-        <div><strong>${escapeHtml(preview.filename)}</strong><small>${preview.rows.length} Datenzeilen erkannt</small></div>
+        <div><strong>${escapeHtml(preview.filename)}</strong><small>${preview.rows.length} Datenzeilen erkannt${targetDeck ? ` · Ziel: ${escapeHtml(targetDeck.name)}` : ""}</small></div>
       </div>
+      ${
+        targetDeck
+          ? `<p class="import-target-note">${icon("cards")} Die Karten werden in den aktuell geoeffneten Stapel importiert.</p>`
+          : ""
+      }
       <div class="mapping-grid">
         ${mappingSelect("Vorderseite", "front", preview.headers, mapping.front, true)}
         ${mappingSelect("Rückseite", "back", preview.headers, mapping.back, true)}
-        ${mappingSelect("Stapel", "deck", preview.headers, mapping.deck, false)}
+        ${targetDeck ? "" : mappingSelect("Stapel", "deck", preview.headers, mapping.deck, false)}
         ${mappingSelect("Hinweis", "hint", preview.headers, mapping.hint, false)}
         ${mappingSelect("Tags", "tags", preview.headers, mapping.tags, false)}
         ${mappingSelect("Markiert", "marked", preview.headers, mapping.marked, false)}
@@ -3551,7 +3558,7 @@ async function confirmImport(event) {
   }
 
   await createLocalBackup("Vor CSV-Import", "safety", false);
-  const result = applyCsvImport(preview.rows, mapping);
+  const result = applyCsvImport(preview.rows, mapping, preview.targetDeckId);
   await saveData();
   closeDialog(elements.importPreviewModal);
   state.importPreview = null;
@@ -3565,11 +3572,12 @@ async function confirmImport(event) {
   );
 }
 
-function applyCsvImport(rows, mapping) {
+function applyCsvImport(rows, mapping, targetDeckId = null) {
   let importedCount = 0;
   let skippedCount = 0;
   let duplicateCount = 0;
-  const fallbackDeckName = getActiveDeck()?.name ?? `CSV-Import ${new Date().toLocaleDateString("de-DE")}`;
+  const targetDeck = targetDeckId ? state.decks.find((deck) => deck.id === targetDeckId) : null;
+  const fallbackDeckName = targetDeck?.name ?? getActiveDeck()?.name ?? `CSV-Import ${new Date().toLocaleDateString("de-DE")}`;
 
   rows.forEach((row) => {
     const front = (row[mapping.front] ?? "").trim();
@@ -3591,13 +3599,13 @@ function applyCsvImport(rows, mapping) {
         auto: "auto",
       }[rawDifficulty] ?? "auto";
     const deckName =
-      mapping.deck >= 0 && row[mapping.deck]?.trim() ? row[mapping.deck].trim() : fallbackDeckName;
+      targetDeck?.name ?? (mapping.deck >= 0 && row[mapping.deck]?.trim() ? row[mapping.deck].trim() : fallbackDeckName);
     if (!front || !back) {
       skippedCount += 1;
       return;
     }
 
-    let deck = state.decks.find((item) => item.name.toLocaleLowerCase("de") === deckName.toLocaleLowerCase("de"));
+    let deck = targetDeck ?? state.decks.find((item) => item.name.toLocaleLowerCase("de") === deckName.toLocaleLowerCase("de"));
     if (!deck) {
       const now = new Date().toISOString();
       deck = {

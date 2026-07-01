@@ -2826,6 +2826,24 @@ h3 {
   font-size: 9px;
 }
 
+.import-target-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.import-target-note svg {
+  width: 16px;
+  height: 16px;
+}
+
 .scheduler-lab-copy .eyebrow {
   color: #9ec9b4;
 }
@@ -3105,13 +3123,12 @@ h3 {
   z-index: 1;
   max-width: 90%;
   max-height: calc(100% - 96px);
-  overflow: auto;
+  overflow: hidden;
   overflow-wrap: anywhere;
   font-family: "Wortwerk Sans", sans-serif;
   font-size: var(--study-card-text-size, clamp(32px, 5vw, 50px));
   letter-spacing: -0.04em;
   line-height: 1.14;
-  scrollbar-width: thin;
 }
 
 .study-card-face strong.with-image {
@@ -3125,26 +3142,26 @@ h3 {
 }
 
 .study-card-face strong.text-fit-medium {
-  --study-card-text-size: clamp(27px, 4vw, 40px);
+  --study-card-text-size: clamp(24px, 3.5vw, 35px);
   line-height: 1.16;
 }
 
 .study-card-face strong.text-fit-long {
-  --study-card-text-size: clamp(21px, 3vw, 31px);
+  --study-card-text-size: clamp(18px, 2.7vw, 26px);
   max-width: 86%;
   line-height: 1.2;
   letter-spacing: -0.025em;
 }
 
 .study-card-face strong.text-fit-dense {
-  --study-card-text-size: clamp(17px, 2.45vw, 24px);
+  --study-card-text-size: clamp(13px, 2vw, 19px);
   max-width: 84%;
   line-height: 1.26;
   letter-spacing: 0;
 }
 
 .study-card-face strong.text-fit-ultra {
-  --study-card-text-size: clamp(14px, 2vw, 19px);
+  --study-card-text-size: clamp(10px, 1.45vw, 14px);
   max-width: 82%;
   line-height: 1.32;
   letter-spacing: 0;
@@ -3786,21 +3803,21 @@ h3 {
   }
 
   .study-card-face strong.text-fit-medium {
-    --study-card-text-size: clamp(22px, 7vw, 31px);
+    --study-card-text-size: clamp(19px, 6vw, 27px);
   }
 
   .study-card-face strong.text-fit-long {
-    --study-card-text-size: clamp(17px, 5.4vw, 23px);
+    --study-card-text-size: clamp(14px, 4.6vw, 19px);
     max-width: 74%;
   }
 
   .study-card-face strong.text-fit-dense {
-    --study-card-text-size: clamp(14px, 4.5vw, 18px);
+    --study-card-text-size: clamp(10px, 3.3vw, 13px);
     max-width: 72%;
   }
 
   .study-card-face strong.text-fit-ultra {
-    --study-card-text-size: clamp(12px, 3.8vw, 15px);
+    --study-card-text-size: clamp(8px, 2.65vw, 10px);
     max-width: 70%;
   }
 
@@ -4154,6 +4171,38 @@ h3 {
 
   .pwa-update-banner .button {
     margin-left: 52px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 620px) and (pointer: coarse) {
+  body::before {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    background:
+      radial-gradient(circle at 70% 20%, rgba(230, 166, 93, 0.16), transparent 22rem),
+      var(--bg);
+    content: "";
+  }
+
+  body::after {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 121;
+    width: min(86vw, 420px);
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: var(--shadow);
+    content: "Bitte halte Wortwerk im Hochformat.";
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.35;
+    text-align: center;
+    transform: translate(-50%, -50%);
   }
 }
 
