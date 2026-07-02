@@ -1,5 +1,5 @@
 (function initializeWortwerkPWA() {
-  const PWA_VERSION = "0.6.8";
+  const PWA_VERSION = "0.6.9";
   const elements = {
     launchScreen: document.querySelector("#appLaunchScreen"),
     launchStatus: document.querySelector("#appLaunchStatus"),
@@ -64,11 +64,36 @@
   }
 
   async function lockPortraitOrientation() {
-    if (!screen.orientation?.lock) return;
+    if (!screen.orientation?.lock) return false;
     try {
-      await screen.orientation.lock("portrait");
+      await screen.orientation.lock("portrait-primary");
+      return true;
     } catch {
-      // Einige Browser erlauben Orientation Lock nur in installierten/fullscreen Apps.
+      try {
+        await screen.orientation.lock("portrait");
+        return true;
+      } catch {
+        // Einige Browser erlauben Orientation Lock nur in installierten/fullscreen Apps.
+      }
+    }
+    return false;
+  }
+
+  function updateOrientationState() {
+    document.body.classList.toggle(
+      "orientation-blocked",
+      window.matchMedia("(orientation: landscape) and (pointer: coarse)").matches,
+    );
+  }
+
+  function enforcePortraitOrientation(attempts = 4) {
+    updateOrientationState();
+    lockPortraitOrientation();
+    for (let index = 1; index < attempts; index += 1) {
+      window.setTimeout(() => {
+        updateOrientationState();
+        lockPortraitOrientation();
+      }, index * 260);
     }
   }
 
@@ -217,7 +242,7 @@
   window.addEventListener("wortwerk:ready", () => {
     appReady = true;
     if (elements.updateButton) elements.updateButton.disabled = !waitingWorker;
-    lockPortraitOrientation();
+    enforcePortraitOrientation(5);
     window.setTimeout(hideLaunchScreen, 160);
 
     if (!isStandalone && isAppleMobile && window.isSecureContext) {
@@ -227,10 +252,11 @@
 
   window.addEventListener("wortwerk:error", showLaunchError);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") lockPortraitOrientation();
+    if (document.visibilityState === "visible") enforcePortraitOrientation(5);
   });
-  window.addEventListener("orientationchange", () => window.setTimeout(lockPortraitOrientation, 120));
-  window.addEventListener("resize", () => window.setTimeout(lockPortraitOrientation, 120));
+  screen.orientation?.addEventListener?.("change", () => enforcePortraitOrientation(5));
+  window.addEventListener("orientationchange", () => window.setTimeout(() => enforcePortraitOrientation(5), 120));
+  window.addEventListener("resize", () => window.setTimeout(() => enforcePortraitOrientation(3), 120));
 
   navigator.serviceWorker?.addEventListener("controllerchange", () => {
     if (reloadStarted) return;

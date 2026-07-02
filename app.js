@@ -8,7 +8,7 @@ const AUTH_LAST_USER_KEY = "wortwerk-local-account-last-user";
 const DEFAULT_USER_DATABASE = "WortwerkDB";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.8";
+const APP_VERSION = "0.6.9";
 const PASSWORD_HASH_ITERATIONS = 210000;
 const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1600;
@@ -94,6 +94,8 @@ const elements = {
   saveStatusText: document.querySelector("#saveStatusText"),
   accountSwitch: document.querySelector("#accountSwitch"),
   sidebar: document.querySelector("#sidebar"),
+  homeNav: document.querySelector("#homeNav"),
+  mobileTabbar: document.querySelector("#mobileTabbar"),
   mobileMenu: document.querySelector("#mobileMenu"),
   mobileBackdrop: document.querySelector("#mobileBackdrop"),
 };
@@ -376,6 +378,7 @@ function icon(name) {
     edit: '<path d="m4 16-.7 4 4-.7L18.5 8.1a2.1 2.1 0 0 0-3-3L4 16Z" /><path d="m13.8 6.2 4 4" />',
     flip: '<path d="M4 7h12a4 4 0 0 1 4 4v1" /><path d="m7 4-3 3 3 3M20 17H8a4 4 0 0 1-4-4v-1" /><path d="m17 20 3-3-3-3" />',
     hint: '<path d="M9 18h6M10 22h4M8.4 14.5A6 6 0 1 1 15.6 14.5c-.9.7-1.6 1.6-1.6 2.5h-4c0-.9-.7-1.8-1.6-2.5Z" />',
+    home: '<path d="M4 11.5 12 4l8 7.5" /><path d="M6.5 10.5V20h11v-9.5" /><path d="M10 20v-5h4v5" />',
     import: '<path d="M12 21V9m0 0 5 5m-5-5-5 5M5 5h14" />',
     learn: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3H6.5A2.5 2.5 0 0 0 4 20.5v-15Z" /><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H14v18a3 3 0 0 1 3-3h.5a2.5 2.5 0 0 1 2.5 2.5v-15Z" />',
     key: '<path d="M15 7a4 4 0 1 0 2.8 6.8L21 17v3h-3l-2-2h-2v-2l-1.2-1.2A4 4 0 0 0 15 7Z" /><circle cx="15" cy="11" r="1" />',
@@ -954,8 +957,7 @@ function getActiveDeck() {
 function render() {
   renderAccountChip();
   renderDeckNavigation();
-  elements.statisticsNav.classList.toggle("active", state.view === "statistics");
-  elements.securityNav.classList.toggle("active", state.view === "security");
+  renderNavigationState();
 
   if (state.view === "security") {
     renderSecurity();
@@ -980,14 +982,31 @@ function render() {
   }
 }
 
+function renderNavigationState() {
+  elements.homeNav?.classList.toggle("active", state.view === "welcome");
+  elements.statisticsNav.classList.toggle("active", state.view === "statistics");
+  elements.securityNav.classList.toggle("active", state.view === "security");
+
+  elements.mobileTabbar?.querySelectorAll("[data-mobile-action]").forEach((button) => {
+    const action = button.dataset.mobileAction;
+    const active =
+      (action === "home" && state.view === "welcome") ||
+      (action === "decks" && ["deck", "study"].includes(state.view)) ||
+      (action === "statistics" && state.view === "statistics") ||
+      (action === "security" && state.view === "security");
+    button.classList.toggle("active", active);
+  });
+}
+
 function renderDeckNavigation() {
   elements.deckTotal.textContent = state.decks.length;
   elements.deckList.innerHTML = state.decks
     .map((deck) => {
       const stats = getDeckStats(deck);
+      const isActiveDeck = deck.id === state.activeDeckId && ["deck", "study"].includes(state.view);
       return `
         <button
-          class="deck-nav-item ${deck.id === state.activeDeckId && state.view !== "statistics" ? "active" : ""}"
+          class="deck-nav-item ${isActiveDeck ? "active" : ""}"
           type="button"
           data-deck-id="${deck.id}"
         >
@@ -1007,6 +1026,118 @@ function renderDeckNavigation() {
 }
 
 function renderWelcome() {
+  {
+    state.view = "welcome";
+    elements.pageTitle.textContent = "Heute";
+    setTopbarAction("Stapel erstellen", "create-deck", "add");
+
+    const deckSummaries = state.decks.map((deck) => ({ deck, stats: getDeckStats(deck) }));
+    const dueTotal = deckSummaries.reduce((total, item) => total + item.stats.sessionDue, 0);
+    const cardTotal = state.decks.reduce((total, deck) => total + deck.cards.length, 0);
+    const learnedTotal = deckSummaries.reduce((total, item) => total + item.stats.learned, 0);
+    const nextDecks = [...deckSummaries]
+      .sort((a, b) => b.stats.sessionDue - a.stats.sessionDue || b.deck.cards.length - a.deck.cards.length)
+      .slice(0, 4);
+    const hasDecks = state.decks.length > 0;
+
+    elements.contentArea.innerHTML = `
+      <section class="today-view">
+        <div class="today-hero">
+          <div>
+            <span class="eyebrow">Tagesueberblick</span>
+            <h2>${dueTotal ? `${dueTotal} Karten sind bereit` : "Heute ist alles ruhig"}</h2>
+            <p>
+              ${
+                dueTotal
+                  ? "Starte direkt mit dem Stapel, der gerade am wichtigsten ist."
+                  : hasDecks
+                    ? "Du kannst frei ueben, neue Karten anlegen oder deine Stapel pflegen."
+                    : "Lege deinen ersten Stapel an oder importiere vorhandene Karten."
+              }
+            </p>
+          </div>
+          <div class="today-primary-actions">
+            <button class="button button-primary" data-action="${dueTotal ? "start-next-due" : hasDecks ? "open-first-deck" : "create-deck"}" type="button">
+              ${icon(dueTotal ? "learn" : hasDecks ? "cards" : "add")}
+              ${dueTotal ? "Jetzt lernen" : hasDecks ? "Stapel oeffnen" : "Ersten Stapel erstellen"}
+            </button>
+            <button class="button button-secondary" data-action="import" type="button">
+              ${icon("upload")} Import
+            </button>
+          </div>
+        </div>
+
+        <div class="today-kpis" aria-label="Sammlungsuebersicht">
+          <article><span>Faellig</span><strong>${dueTotal}</strong><small>heute lernbereit</small></article>
+          <article><span>Stapel</span><strong>${state.decks.length}</strong><small>Sammlungen</small></article>
+          <article><span>Karten</span><strong>${cardTotal}</strong><small>insgesamt</small></article>
+          <article><span>Gelernt</span><strong>${learnedTotal}</strong><small>Langzeitlernen</small></article>
+        </div>
+
+        <div class="today-grid">
+          <section class="today-panel">
+            <div class="section-heading">
+              <div>
+                <span class="eyebrow">Stapel</span>
+                <h3>${hasDecks ? "Als Naechstes sinnvoll" : "Noch keine Stapel"}</h3>
+              </div>
+              <button class="button button-compact button-secondary" data-action="create-deck" type="button">
+                ${icon("add")} Stapel
+              </button>
+            </div>
+            ${
+              hasDecks
+                ? `<div class="deck-quick-grid">
+                    ${nextDecks
+                      .map(
+                        ({ deck, stats }) => `
+                          <button class="deck-quick-card" type="button" data-deck-id="${deck.id}">
+                            <span class="deck-quick-icon">${icon(stats.sessionDue ? "learn" : "cards")}</span>
+                            <span class="deck-quick-copy">
+                              <strong>${escapeHtml(deck.name)}</strong>
+                              <small>${stats.sessionDue ? `${stats.sessionDue} faellig` : `${deck.cards.length} Karten`}</small>
+                            </span>
+                            <span class="deck-quick-next">${icon("next")}</span>
+                          </button>
+                        `,
+                      )
+                      .join("")}
+                  </div>`
+                : `<div class="empty-dashboard">
+                    ${icon("cards")}
+                    <strong>Starte mit einem Stapel.</strong>
+                    <p>Danach kannst du Karten einzeln anlegen oder per CSV importieren.</p>
+                  </div>`
+            }
+          </section>
+
+          <section class="today-panel today-actions-panel">
+            <div class="section-heading">
+              <div>
+                <span class="eyebrow">Schnellzugriff</span>
+                <h3>Haeufige Aufgaben</h3>
+              </div>
+            </div>
+            <div class="quick-action-list">
+              <button type="button" data-action="${hasDecks ? "create-card" : "create-deck"}">
+                ${icon(hasDecks ? "add" : "cards")}
+                <span><strong>${hasDecks ? "Karte hinzufuegen" : "Stapel erstellen"}</strong><small>${hasDecks ? "im aktiven Stapel" : "deine erste Sammlung"}</small></span>
+              </button>
+              <button type="button" data-action="import">
+                ${icon("upload")}
+                <span><strong>Import starten</strong><small>CSV oder Sicherung</small></span>
+              </button>
+              <button type="button" data-action="open-statistics">
+                ${icon("chart")}
+                <span><strong>Statistik ansehen</strong><small>Fortschritt und Planung</small></span>
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+    `;
+    return;
+  }
   state.view = "welcome";
   elements.pageTitle.textContent = "Willkommen bei Wortwerk";
   setTopbarAction("Stapel erstellen", "create-deck", "add");
@@ -3729,6 +3860,11 @@ function handleAction(action) {
       state.view = "deck";
       startStudy(false);
     },
+    "open-statistics": () => {
+      state.view = "statistics";
+      state.study = null;
+      render();
+    },
     "export-csv": exportActiveDeckCsv,
     "export-json": () => exportJsonBackup(false),
     "create-local-backup": () => createLocalBackup(),
@@ -3818,6 +3954,12 @@ function handleStudyAction(action) {
 }
 
 elements.newDeckSidebar.addEventListener("click", () => openDeckModal());
+elements.homeNav?.addEventListener("click", () => {
+  state.view = "welcome";
+  state.study = null;
+  closeMobileMenu();
+  render();
+});
 elements.statisticsNav.addEventListener("click", () => {
   state.view = "statistics";
   state.study = null;
@@ -3886,6 +4028,19 @@ elements.deckList.addEventListener("click", (event) => {
 });
 
 elements.contentArea.addEventListener("click", (event) => {
+  const deckButton = event.target.closest("[data-deck-id]");
+  if (deckButton) {
+    state.activeDeckId = deckButton.dataset.deckId;
+    state.view = "deck";
+    state.study = null;
+    state.searchQuery = "";
+    state.cardTagFilter = "";
+    state.cardMetaFilter = "all";
+    closeMobileMenu();
+    render();
+    return;
+  }
+
   const markedButton = event.target.closest("[data-toggle-marked]");
   if (markedButton) {
     const cardId = markedButton.dataset.toggleMarked;
@@ -4026,6 +4181,45 @@ elements.mobileMenu.addEventListener("click", () => {
   elements.mobileBackdrop.classList.add("visible");
 });
 elements.mobileBackdrop.addEventListener("click", closeMobileMenu);
+elements.mobileTabbar?.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-mobile-action]");
+  if (!button) return;
+  const action = button.dataset.mobileAction;
+
+  if (action === "home") {
+    state.view = "welcome";
+    state.study = null;
+    render();
+    return;
+  }
+
+  if (action === "decks") {
+    elements.sidebar.classList.add("open");
+    elements.mobileBackdrop.classList.add("visible");
+    return;
+  }
+
+  if (action === "create") {
+    if (getActiveDeck()) openCardModal();
+    else openDeckModal();
+    return;
+  }
+
+  if (action === "statistics") {
+    state.view = "statistics";
+    state.study = null;
+    render();
+    return;
+  }
+
+  if (action === "security") {
+    state.view = "security";
+    state.study = null;
+    await refreshSafetyData();
+    state.validationReport = validateCurrentData();
+    render();
+  }
+});
 
 document.addEventListener("keydown", (event) => {
   if (state.view !== "study" || !state.study || state.study.completed) return;
