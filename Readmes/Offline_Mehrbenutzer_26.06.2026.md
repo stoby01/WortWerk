@@ -658,3 +658,40 @@ pwa.js?v=0.6.9
 app.js?v=0.6.9
 wortwerk-app-0.6.9
 ```
+
+## Nachtrag: Wortwerk 0.6.10 - Handy-Ansicht und Hochformat-Fallback
+
+Diese Version verfeinert die Smartphone-Oberflaeche. Die mobile Ansicht soll weniger ueberladen
+wirken und schneller zeigen, wo man gerade ist.
+
+Angepasst wurde:
+
+- die obere Leiste ist auf dem Handy kompakter,
+- das Benutzerkonto ist dort nur noch als Icon sichtbar,
+- die Tagesansicht nutzt engere Abstaende,
+- Kennzahlen sind kompakter und zeigen auf dem Handy weniger Zusatztext,
+- Stapel- und Schnellzugriffskarten sind kleiner und ruhiger,
+- die untere Tab-Leiste ist etwas flacher.
+
+Der Querformat-Fallback wurde ebenfalls geaendert. Vorher wurde im Querformat nur ein Hinweistext
+angezeigt. Ab `0.6.10` bleibt Wortwerk stattdessen in einer zentrierten Hochformat-Flaeche sichtbar.
+Das ist wichtig, weil Browser die echte Dreh-Sperre nicht immer respektieren.
+
+Die Logik ist jetzt:
+
+1. Das Manifest fordert weiterhin `portrait-primary`.
+2. `pwa.js` versucht weiterhin aktiv die Screen-Orientation-API.
+3. Wenn der Browser trotzdem quer rendert, stellt CSS die App als schmale Hochformat-Appflaeche dar.
+
+Wichtig: Eine Web-App kann das physische Drehen des Browserfensters nicht auf jedem Smartphone
+vollstaendig verhindern. Die installierte PWA hat die besten Chancen, wirklich im Hochformat zu
+bleiben. Der neue CSS-Fallback sorgt aber dafuer, dass die App nicht mehr nur eine Textmeldung zeigt.
+
+Neue Cache-Dateien:
+
+```text
+styles.css?v=0.6.10
+pwa.js?v=0.6.10
+app.js?v=0.6.10
+wortwerk-app-0.6.10
+```

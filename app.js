@@ -8,7 +8,7 @@ const AUTH_LAST_USER_KEY = "wortwerk-local-account-last-user";
 const DEFAULT_USER_DATABASE = "WortwerkDB";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.9";
+const APP_VERSION = "0.6.10";
 const PASSWORD_HASH_ITERATIONS = 210000;
 const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1600;
@@ -1119,7 +1119,7 @@ function renderWelcome() {
               </div>
             </div>
             <div class="quick-action-list">
-              <button type="button" data-action="${hasDecks ? "create-card" : "create-deck"}">
+              <button type="button" data-action="${hasDecks ? "quick-create-card" : "create-deck"}">
                 ${icon(hasDecks ? "add" : "cards")}
                 <span><strong>${hasDecks ? "Karte hinzufuegen" : "Stapel erstellen"}</strong><small>${hasDecks ? "im aktiven Stapel" : "deine erste Sammlung"}</small></span>
               </button>
@@ -3834,6 +3834,15 @@ function handleAction(action) {
   const deck = getActiveDeck();
   const actions = {
     "create-deck": () => openDeckModal(),
+    "quick-create-card": () => {
+      if (!state.activeDeckId) state.activeDeckId = state.decks[0]?.id ?? null;
+      if (!state.activeDeckId) {
+        openDeckModal();
+        return;
+      }
+      state.view = "deck";
+      openCardModal();
+    },
     "open-first-deck": () => {
       state.activeDeckId = state.decks[0]?.id ?? null;
       state.view = state.activeDeckId ? "deck" : "welcome";
@@ -4200,7 +4209,7 @@ elements.mobileTabbar?.addEventListener("click", async (event) => {
   }
 
   if (action === "create") {
-    if (getActiveDeck()) openCardModal();
+    if (state.view === "deck" && getActiveDeck()) openCardModal();
     else openDeckModal();
     return;
   }
