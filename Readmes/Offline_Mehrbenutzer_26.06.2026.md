@@ -470,3 +470,191 @@ pwa.js?v=0.6.4
 app.js?v=0.6.4
 wortwerk-app-0.6.4
 ```
+
+## Nachtrag: Wortwerk 0.6.5 - Smartphone-Topbar
+
+Auf sehr schmalen Smartphone-Bildschirmen war der Benutzername nicht sichtbar, weil der
+Benutzerchip auf ein reines Icon reduziert wurde. Ausserdem wurde der Seitentitel einzeilig
+abgeschnitten, sodass zum Beispiel nur `Willkommen...` sichtbar war.
+
+Ab Version `0.6.5` verwendet die Topbar auf kleinen Bildschirmen ein zweizeiliges Raster:
+
+```text
+[Menue] [Seitentitel] [Aktion]
+[Eingeloggt als Benutzername]
+```
+
+Der Benutzername bleibt dadurch auch im Hochformat sichtbar.
+Der Seitentitel darf auf dem Smartphone bis zu zwei Zeilen verwenden und wird erst danach
+abgeschnitten.
+
+Technisch wurde nur das mobile CSS angepasst:
+
+- `.topbar` wird unter 620 Pixeln zum Grid,
+- `.account-switch` bekommt eine volle zweite Zeile,
+- `h1` darf auf zwei Zeilen umbrechen,
+- die PWA-Version wurde auf `0.6.5` angehoben.
+
+Neue Cache-Dateien:
+
+```text
+styles.css?v=0.6.5
+pwa.js?v=0.6.5
+app.js?v=0.6.5
+wortwerk-app-0.6.5
+```
+
+## Nachtrag: Wortwerk 0.6.6 - Hochformat fuer Smartphone-PWA
+
+Auf Smartphones konnte sich die App je nach Browser weiterhin ins Querformat drehen, obwohl auf dem
+Geraet die Rotation gesperrt war. Die wichtigste Ursache war das Manifest:
+
+```json
+"orientation": "any"
+```
+
+Damit hat Wortwerk bisher ausdruecklich jede Ausrichtung erlaubt.
+
+Ab Version `0.6.6` ist die installierte PWA auf Hochformat ausgerichtet:
+
+```json
+"orientation": "portrait"
+```
+
+Zusaetzlich versucht `pwa.js` beim Start der installierten App, die Screen-Orientation-API zu nutzen:
+
+```js
+await screen.orientation.lock("portrait");
+```
+
+Das funktioniert nur dort, wo der Browser es erlaubt. Besonders wichtig:
+
+- In einer installierten PWA ist die Chance gut.
+- Im normalen Browser-Tab kann eine Webseite Rotation nicht verlaesslich verbieten.
+- iOS/Safari kann solche Vorgaben je nach Installationsart ignorieren.
+
+Die PWA-Version wurde auf `0.6.6` angehoben:
+
+```text
+styles.css?v=0.6.6
+pwa.js?v=0.6.6
+app.js?v=0.6.6
+wortwerk-app-0.6.6
+```
+
+## Nachtrag: Wortwerk 0.6.7 - Adaptive Karten-Typografie
+
+Auf Smartphone-Karten konnten lange Texte die Karte sprengen. Besonders Rueckseiten mit ganzen
+Saetzen liefen ueber den Kartenrand, ueber die Navigation oder bis in den Bewertungsbereich.
+
+Ab Version `0.6.7` bekommt jede Lernkarte eine Textfit-Klasse:
+
+```js
+text-fit-short
+text-fit-medium
+text-fit-long
+text-fit-dense
+text-fit-ultra
+```
+
+Die Klasse wird aus Zeichenanzahl, Wortanzahl und vorhandenem Bild berechnet. Kurze Begriffe bleiben
+gross und praegnant, laengere Saetze werden stufenweise kleiner und ruhiger gesetzt.
+
+Zusaetzlich begrenzt CSS den Textbereich innerhalb der Karte:
+
+- lange Texte bekommen kleinere Schrift,
+- die maximale Textbreite ist auf Mobile enger,
+- Text kann innerhalb der Karte scrollen, statt ueberzulaufen,
+- Denkanstoesse bekommen mehr Hoehe und ebenfalls Scroll-Schutz.
+
+Die Orientation-Sperre wurde ebenfalls etwas erweitert. `pwa.js` versucht den Portrait-Lock nun auch
+bei Sichtbarkeitswechsel, `orientationchange` und `resize`. Browser, die das nicht erlauben, werfen
+weiterhin intern ab, die App laeuft aber normal weiter.
+
+Neue Cache-Dateien:
+
+```text
+styles.css?v=0.6.7
+pwa.js?v=0.6.7
+app.js?v=0.6.7
+wortwerk-app-0.6.7
+```
+
+## Nachtrag: Wortwerk 0.6.8 - Karten ohne Textscroll und CSV-Zielstapel
+
+Nach dem Test auf dem Smartphone wurde die adaptive Karten-Typografie erneut angepasst.
+Die erste Textfit-Version konnte bei langen Texten innerhalb der Karte scrollen. Das wurde entfernt.
+
+Ab Version `0.6.8` gilt:
+
+- Kartentext scrollt nicht mehr,
+- lange Texte werden frueher und staerker verkleinert,
+- die Textfit-Stufen greifen bereits bei mittleren CSV-Texten,
+- Denkanstoesse behalten Scroll-Schutz, weil sie ausserhalb der eigentlichen Karte stehen.
+
+Ausserdem wurde der CSV-Import korrigiert. Wenn der Import aus einem geoeffneten Stapel gestartet
+wird, ist dieser Stapel jetzt das feste Ziel. Eine vorhandene CSV-Spalte `Stapel` erzeugt dann nicht
+mehr versehentlich neue Stapel.
+
+Fuer Smartphones wurde zusaetzlich eine Querformat-Sperransicht eingebaut. Falls ein Browser die
+echte Orientation-Sperre ignoriert und die App trotzdem quer darstellt, verdeckt Wortwerk die
+Oberflaeche mit dem Hinweis:
+
+```text
+Bitte halte Wortwerk im Hochformat.
+```
+
+Neue Cache-Dateien:
+
+```text
+styles.css?v=0.6.8
+pwa.js?v=0.6.8
+app.js?v=0.6.8
+wortwerk-app-0.6.8
+```
+
+## Nachtrag: Wortwerk 0.6.9 - Uebersichtlichere App-Struktur und Portrait-Sperre
+
+Diese Version ordnet die Oberflaeche neu, ohne die bestehenden Lern- und Kontodaten zu veraendern.
+Der Startbildschirm ist jetzt ein Tages-Dashboard statt einer grossen Willkommensflaeche.
+
+Neu ist die Ansicht `Heute`:
+
+- faellige Karten stehen oben im Fokus,
+- die wichtigsten Stapel werden als direkte Kacheln angezeigt,
+- Schnellzugriffe fuer Karte erstellen, Import und Statistik sind gebuendelt,
+- die Kennzahlen `Faellig`, `Stapel`, `Karten` und `Gelernt` geben einen schnellen Ueberblick.
+
+Auf Smartphones gibt es jetzt eine feste untere Navigation:
+
+```text
+Heute | Stapel | Neu | Statistik | Daten
+```
+
+Diese Leiste macht die App leichter bedienbar, weil die wichtigsten Bereiche nicht mehr nur ueber
+das seitliche Menue erreichbar sind. `Stapel` oeffnet die Stapelliste, `Neu` erstellt je nach
+Kontext eine Karte oder einen Stapel.
+
+Technisch wurde dafuer in `index.html` eine `mobile-tabbar` ergaenzt. `app.js` verwaltet den
+aktiven Zustand ueber `renderNavigationState()` und reagiert auf `data-mobile-action`.
+
+Die Portrait-Sperre wurde ebenfalls verschaerft:
+
+- `manifest.webmanifest` nutzt nun `portrait-primary`,
+- `pwa.js` versucht zuerst `screen.orientation.lock("portrait-primary")`,
+- falls das scheitert, wird `portrait` versucht,
+- die Sperre wird beim Start, bei Sichtbarkeit, Rotation und Resize mehrfach erneut angefordert,
+- im Querformat blockiert eine Sperr-Ansicht die Bedienung.
+
+Wichtig zum Lernen: Eine Web-App kann die System-Einstellung des Smartphones nicht sicher auslesen
+und nicht auf jedem Browser echtes Drehen verhindern. Darum kombiniert Wortwerk jetzt drei Ebenen:
+Manifest-Vorgabe, JavaScript-Sperrversuch und CSS-Sperrbildschirm.
+
+Neue Cache-Dateien:
+
+```text
+styles.css?v=0.6.9
+pwa.js?v=0.6.9
+app.js?v=0.6.9
+wortwerk-app-0.6.9
+```
