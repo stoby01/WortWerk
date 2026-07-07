@@ -16,7 +16,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=0.6.10" />
+    <link rel="stylesheet" href="styles.css?v=0.6.11" />
   </head>
   <body class="auth-pending">
     <div class="app-launch-screen" id="appLaunchScreen" role="status" aria-live="polite">
@@ -427,6 +427,41 @@
         </div>
       </form>
     </dialog>
+    <dialog class="modal csv-format-modal" id="csvFormatModal">
+      <div class="modal-card csv-format-card">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">CSV-Vorlage</span>
+            <h2>KI-Prompt fuer Wortwerk</h2>
+          </div>
+          <button class="icon-button close-modal" type="button" data-close="csvFormatModal" aria-label="Schliessen">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="csv-format-content">
+          <p>Kopiere diese Vorlage in eine KI, um eine Wortwerk-kompatible CSV-Datei fuer neue Karten erstellen zu lassen.</p>
+          <pre id="csvFormatPrompt" class="csv-format-prompt"></pre>
+          <div class="csv-format-note">
+            <span>Pflichtfelder: Vorderseite und Rueckseite.</span>
+            <span>Importiert werden Stapel, Hinweis, Tags, Markierung und Schwierigkeit.</span>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="button button-ghost" type="button" data-close="csvFormatModal">Schliessen</button>
+          <button class="button button-primary" id="copyCsvFormatPrompt" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="8" y="8" width="11" height="11" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+            </svg>
+            Prompt kopieren
+          </button>
+        </div>
+      </div>
+    </dialog>
 
     <input
       id="importFile"
@@ -438,7 +473,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="storage.js"></script>
-    <script src="pwa.js?v=0.6.10"></script>
-    <script src="app.js?v=0.6.10"></script>
+    <script src="pwa.js?v=0.6.11"></script>
+    <script src="app.js?v=0.6.11"></script>
   </body>
 </html>

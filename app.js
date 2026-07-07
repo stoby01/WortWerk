@@ -8,7 +8,25 @@ const AUTH_LAST_USER_KEY = "wortwerk-local-account-last-user";
 const DEFAULT_USER_DATABASE = "WortwerkDB";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.10";
+const APP_VERSION = "0.6.11";
+const CSV_FORMAT_PROMPT = `Erstelle eine Wortwerk-kompatible CSV-Datei fuer einen Vokabelstapel. Verwende genau diese Spalten:
+Stapel;Vorderseite;Rueckseite;Hinweis;Tags;Markiert;Schwierigkeit
+
+Regeln:
+- Eine Zeile pro Karte.
+- Vorderseite und Rueckseite sind Pflichtfelder.
+- Tags innerhalb einer Zelle mit Kommas trennen, z. B. "Englisch,A1,Essen".
+- Markiert ist true oder false.
+- Schwierigkeit ist auto, easy, medium oder hard.
+- Nutze Semikolon als CSV-Trennzeichen.
+- Setze Felder mit Kommas, Semikolons oder Anfuehrungszeichen in doppelte Anfuehrungszeichen.
+- Gib nur die CSV aus, ohne Markdown-Codeblock und ohne Erklaerung davor oder danach.
+
+Beispiel:
+Stapel;Vorderseite;Rueckseite;Hinweis;Tags;Markiert;Schwierigkeit
+Englisch A1;apple;Apfel;"Obst, oft rot oder gruen";"Englisch,A1,Essen";false;auto
+Englisch A1;journey;Reise;"beginnt mit J";"Englisch,A1,Reisen";false;auto
+Englisch A1;expensive;teuer;"Gegenteil von cheap";"Englisch,A1,Geld";true;medium`;
 const PASSWORD_HASH_ITERATIONS = 210000;
 const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1600;
@@ -89,6 +107,9 @@ const elements = {
   importPreviewForm: document.querySelector("#importPreviewForm"),
   importPreviewContent: document.querySelector("#importPreviewContent"),
   importConfirmButton: document.querySelector("#importConfirmButton"),
+  csvFormatModal: document.querySelector("#csvFormatModal"),
+  csvFormatPrompt: document.querySelector("#csvFormatPrompt"),
+  copyCsvFormatPrompt: document.querySelector("#copyCsvFormatPrompt"),
   toast: document.querySelector("#toast"),
   saveStatus: document.querySelector("#saveStatus"),
   saveStatusText: document.querySelector("#saveStatusText"),
@@ -373,6 +394,7 @@ function icon(name) {
     chart:
       '<path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />',
     check: '<path d="m5 12 4 4L19 6" />',
+    copy: '<rect x="8" y="8" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />',
     clock: '<circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />',
     download: '<path d="M12 3v12m0 0 5-5m-5 5-5-5M5 19h14" />',
     edit: '<path d="m4 16-.7 4 4-.7L18.5 8.1a2.1 2.1 0 0 0-3-3L4 16Z" /><path d="m13.8 6.2 4 4" />',
@@ -1216,7 +1238,7 @@ function renderDeck(deck) {
           <span class="eyebrow">Stapelübersicht</span>
           <p class="deck-description">${description}</p>
         </div>
-        <div class="deck-primary-actions">
+        <div class="deck-primary-actions" aria-label="Lernaktionen">
           <button
             class="button button-primary"
             data-action="start-study"
@@ -1225,6 +1247,9 @@ function renderDeck(deck) {
           >
             ${icon("learn")}
             ${stats.sessionDue ? `${stats.sessionDue} fällige lernen` : "Heute alles geschafft"}
+          </button>
+          <button class="button button-secondary" data-action="start-full-study" type="button" ${deck.cards.length ? "" : "disabled"}>
+            ${icon("check")} Alle Karten prüfen
           </button>
           <button class="button button-secondary" data-action="start-practice" type="button" ${deck.cards.length ? "" : "disabled"}>
             ${icon("shuffle")} Frei üben
@@ -1250,25 +1275,34 @@ function renderDeck(deck) {
         </article>
       </div>
 
-      <div class="management-bar">
-        <div class="management-group">
-          <button class="button button-compact button-secondary" data-action="edit-deck" type="button">
-            ${icon("edit")} Stapel bearbeiten
-          </button>
-          <button class="button button-compact button-danger-ghost" data-action="delete-deck" type="button">
-            ${icon("trash")} Stapel löschen
-          </button>
+      <div class="management-bar" aria-label="Stapelwerkzeuge">
+        <div class="management-section">
+          <span class="management-label">Stapel</span>
+          <div class="management-group">
+            <button class="button button-compact button-secondary" data-action="edit-deck" type="button">
+              ${icon("edit")} Bearbeiten
+            </button>
+            <button class="button button-compact button-danger-ghost" data-action="delete-deck" type="button">
+              ${icon("trash")} Löschen
+            </button>
+          </div>
         </div>
-        <div class="management-group">
-          <button class="button button-compact button-secondary" data-action="export-csv" type="button">
-            ${icon("download")} CSV
-          </button>
-          <button class="button button-compact button-secondary" data-action="export-json" type="button">
-            ${icon("download")} Sicherung
-          </button>
-          <button class="button button-compact button-secondary" data-action="import" type="button">
-            ${icon("upload")} Import
-          </button>
+        <div class="management-section">
+          <span class="management-label">Dateien</span>
+          <div class="management-group">
+            <button class="button button-compact button-secondary" data-action="open-csv-format" type="button">
+              ${icon("copy")} CSV-Format
+            </button>
+            <button class="button button-compact button-secondary" data-action="export-csv" type="button">
+              ${icon("download")} CSV
+            </button>
+            <button class="button button-compact button-secondary" data-action="export-json" type="button">
+              ${icon("download")} Sicherung
+            </button>
+            <button class="button button-compact button-secondary" data-action="import" type="button">
+              ${icon("upload")} Import
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2571,13 +2605,16 @@ function getStudyCards(deck) {
   return [...due, ...fresh];
 }
 
-function startStudy(practice = false) {
+function startStudy(mode = "scheduled") {
   const deck = getActiveDeck();
   if (!deck) return;
 
-  const cards = practice ? [...deck.cards] : getStudyCards(deck);
+  const normalizedMode = mode === true ? "practice" : mode === false ? "scheduled" : mode;
+  const practice = normalizedMode === "practice";
+  const fullReview = normalizedMode === "full";
+  const cards = practice ? [...deck.cards] : fullReview ? [...deck.cards] : getStudyCards(deck);
   if (!cards.length) {
-    showToast(practice ? "Dieser Stapel enthält noch keine Karten." : "Für heute ist nichts mehr fällig.");
+    showToast(practice || fullReview ? "Dieser Stapel enthält noch keine Karten." : "Für heute ist nichts mehr fällig.");
     return;
   }
 
@@ -2589,6 +2626,7 @@ function startStudy(practice = false) {
     hintVisible: false,
     responses: {},
     practice,
+    fullReview,
     completed: false,
     startedAt: new Date().toISOString(),
     cardShownAt: Date.now(),
@@ -2597,7 +2635,6 @@ function startStudy(practice = false) {
   closeMobileMenu();
   render();
 }
-
 function renderStudy() {
   renderDeckNavigation();
   const deck = state.decks.find((item) => item.id === state.study.deckId);
@@ -2640,7 +2677,7 @@ function renderStudy() {
     <section class="study-view">
       <div class="study-header">
         <div>
-          <span class="eyebrow">${state.study.practice ? "Freies Üben" : "Geplante Wiederholung"}</span>
+          <span class="eyebrow">${state.study.practice ? "Freies Üben" : state.study.fullReview ? "Alle Karten prüfen" : "Geplante Wiederholung"}</span>
           <strong>${completedCount} von ${total} bearbeitet</strong>
         </div>
         <button class="button button-compact button-secondary" data-study-action="shuffle" type="button">
@@ -3466,6 +3503,32 @@ function safeFilename(value) {
     .toLowerCase() || "wortwerk-stapel";
 }
 
+function openCsvFormatModal() {
+  if (!elements.csvFormatModal || !elements.csvFormatPrompt) return;
+  elements.csvFormatPrompt.textContent = CSV_FORMAT_PROMPT;
+  elements.csvFormatModal.showModal();
+}
+
+async function copyCsvFormatPrompt() {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(CSV_FORMAT_PROMPT);
+    } else {
+      const field = document.createElement("textarea");
+      field.value = CSV_FORMAT_PROMPT;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.append(field);
+      field.select();
+      document.execCommand("copy");
+      field.remove();
+    }
+    showToast("CSV-Prompt wurde kopiert.", "success");
+  } catch {
+    showToast("Der Prompt konnte nicht kopiert werden.", "error");
+  }
+}
 async function importFile(file) {
   if (!file) return;
 
@@ -3851,9 +3914,10 @@ function handleAction(action) {
     "create-card": () => openCardModal(),
     "edit-deck": () => openDeckModal(deck?.id),
     "delete-deck": removeActiveDeck,
-    "start-study": () => startStudy(false),
-    "start-practice": () => startStudy(true),
-    "restart-practice": () => startStudy(true),
+    "start-study": () => startStudy("scheduled"),
+    "start-full-study": () => startStudy("full"),
+    "start-practice": () => startStudy("practice"),
+    "restart-practice": () => startStudy("practice"),
     "end-study": endStudy,
     "undo-review": undoLastReview,
     "go-home": () => {
@@ -3874,6 +3938,7 @@ function handleAction(action) {
       state.study = null;
       render();
     },
+    "open-csv-format": openCsvFormatModal,
     "export-csv": exportActiveDeckCsv,
     "export-json": () => exportJsonBackup(false),
     "create-local-backup": () => createLocalBackup(),
@@ -3988,6 +4053,7 @@ elements.accountSwitch.addEventListener("click", openUserSwitch);
 elements.deckForm.addEventListener("submit", saveDeckFromForm);
 elements.cardForm.addEventListener("submit", saveCardFromForm);
 elements.importPreviewForm.addEventListener("submit", confirmImport);
+elements.copyCsvFormatPrompt?.addEventListener("click", copyCsvFormatPrompt);
 elements.importFile.addEventListener("change", () => importFile(elements.importFile.files[0]));
 elements.cardImage.addEventListener("change", async () => {
   const file = elements.cardImage.files[0];
@@ -4179,7 +4245,7 @@ document.querySelectorAll("[data-close]").forEach((button) => {
   button.addEventListener("click", () => closeDialog(document.querySelector(`#${button.dataset.close}`)));
 });
 
-[elements.deckModal, elements.cardModal, elements.importPreviewModal].forEach((dialog) => {
+[elements.deckModal, elements.cardModal, elements.importPreviewModal, elements.csvFormatModal].forEach((dialog) => {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) closeDialog(dialog);
   });
