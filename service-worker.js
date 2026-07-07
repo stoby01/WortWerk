@@ -1,4 +1,4 @@
-const APP_VERSION = "0.6.11";
+const APP_VERSION = "0.6.12";
 const CACHE_PREFIX = "wortwerk-app-";
 const CACHE_NAME = `${CACHE_PREFIX}${APP_VERSION}`;
 const APP_INDEX = "./index.html";
@@ -6,10 +6,10 @@ const APP_INDEX = "./index.html";
 const APP_SHELL = [
   "./",
   APP_INDEX,
-  "./styles.css?v=0.6.11",
+  "./styles.css?v=0.6.12",
   "./storage.js",
-  "./pwa.js?v=0.6.11",
-  "./app.js?v=0.6.11",
+  "./pwa.js?v=0.6.12",
+  "./app.js?v=0.6.12",
   "./manifest.webmanifest",
   "./CSV-BEISPIEL.csv",
   "./fonts/WortwerkSans-Regular.ttf",

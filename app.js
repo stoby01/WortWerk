@@ -8,8 +8,8 @@ const AUTH_LAST_USER_KEY = "wortwerk-local-account-last-user";
 const DEFAULT_USER_DATABASE = "WortwerkDB";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.11";
-const CSV_FORMAT_PROMPT = `Erstelle eine Wortwerk-kompatible CSV-Datei fuer einen Vokabelstapel. Verwende genau diese Spalten:
+const APP_VERSION = "0.6.12";
+const CSV_FORMAT_PROMPT = `Erstelle eine Wortwerk-kompatible CSV-Datei fuer einen Vokabelstapel. Wenn dein System Dateien erzeugen kann, erstelle eine herunterladbare Datei mit dem Namen wortwerk-stapel.csv. Verwende genau diese Spalten:
 Stapel;Vorderseite;Rueckseite;Hinweis;Tags;Markiert;Schwierigkeit
 
 Regeln:
@@ -20,7 +20,8 @@ Regeln:
 - Schwierigkeit ist auto, easy, medium oder hard.
 - Nutze Semikolon als CSV-Trennzeichen.
 - Setze Felder mit Kommas, Semikolons oder Anfuehrungszeichen in doppelte Anfuehrungszeichen.
-- Gib nur die CSV aus, ohne Markdown-Codeblock und ohne Erklaerung davor oder danach.
+- Wenn du keinen Dateianhang erstellen kannst, gib ausschliesslich den Inhalt der CSV-Datei aus, damit ich ihn direkt als .csv-Datei speichern kann.
+- Verwende keinen Markdown-Codeblock, keine Tabelle und keine Erklaerung davor oder danach.
 
 Beispiel:
 Stapel;Vorderseite;Rueckseite;Hinweis;Tags;Markiert;Schwierigkeit

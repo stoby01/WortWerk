@@ -1,5 +1,5 @@
 (function initializeWortwerkPWA() {
-  const PWA_VERSION = "0.6.11";
+  const PWA_VERSION = "0.6.12";
   const elements = {
     launchScreen: document.querySelector("#appLaunchScreen"),
     launchStatus: document.querySelector("#appLaunchStatus"),
