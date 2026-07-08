@@ -8,7 +8,7 @@ const AUTH_LAST_USER_KEY = "wortwerk-local-account-last-user";
 const DEFAULT_USER_DATABASE = "WortwerkDB";
 const LEGACY_STORAGE_KEYS = ["wortwerk-data-v3", "wortwerk-data-v2", "wortwerk-data-v1"];
 const SCHEMA_VERSION = 5;
-const APP_VERSION = "0.6.12";
+const APP_VERSION = "0.6.13";
 const CSV_FORMAT_PROMPT = `Erstelle eine Wortwerk-kompatible CSV-Datei fuer einen Vokabelstapel. Wenn dein System Dateien erzeugen kann, erstelle eine herunterladbare Datei mit dem Namen wortwerk-stapel.csv. Verwende genau diese Spalten:
 Stapel;Vorderseite;Rueckseite;Hinweis;Tags;Markiert;Schwierigkeit
 
@@ -1038,7 +1038,7 @@ function renderDeckNavigation() {
             <span class="deck-nav-name">${escapeHtml(deck.name)}</span>
             <span class="deck-nav-count">
               ${deck.cards.length} ${deck.cards.length === 1 ? "Karte" : "Karten"}
-              ${stats.sessionDue ? ` · ${stats.sessionDue} fällig` : ""}
+              ${stats.newCount ? ` · ${stats.newCount} neu` : stats.dueReviews ? ` · ${stats.dueReviews} fällig` : ""}
             </span>
           </span>
           <span class="deck-nav-chevron">${icon("next")}</span>
@@ -1214,13 +1214,23 @@ function getDeckStats(deck) {
     (card) => card.learning.status !== "new" && Date.parse(card.learning.dueAt) <= now,
   ).length;
   const learned = deck.cards.filter((card) => card.learning.status === "review").length;
+  const studyRoundCount = getStudyCards(deck).length;
 
   return {
     newCount,
     dueReviews,
     learned,
+    studyRoundCount,
     sessionDue: dueReviews + Math.min(newCount, state.settings.newCardsPerDay),
   };
+}
+
+function deckStudyButtonLabel(stats) {
+  const roundSize = Math.max(0, stats.studyRoundCount);
+  if (!roundSize) return "Keine Karten";
+  if (stats.newCount) return `${Math.min(stats.newCount, roundSize)} neue lernen`;
+  if (stats.dueReviews) return `${Math.min(stats.dueReviews, roundSize)} fällige lernen`;
+  return `${roundSize} weiterlernen`;
 }
 
 function renderDeck(deck) {
@@ -1244,13 +1254,10 @@ function renderDeck(deck) {
             class="button button-primary"
             data-action="start-study"
             type="button"
-            ${stats.sessionDue === 0 ? "disabled" : ""}
+            ${stats.studyRoundCount === 0 ? "disabled" : ""}
           >
             ${icon("learn")}
-            ${stats.sessionDue ? `${stats.sessionDue} fällige lernen` : "Heute alles geschafft"}
-          </button>
-          <button class="button button-secondary" data-action="start-full-study" type="button" ${deck.cards.length ? "" : "disabled"}>
-            ${icon("check")} Alle Karten prüfen
+            ${deckStudyButtonLabel(stats)}
           </button>
           <button class="button button-secondary" data-action="start-practice" type="button" ${deck.cards.length ? "" : "disabled"}>
             ${icon("shuffle")} Frei üben
@@ -1260,9 +1267,9 @@ function renderDeck(deck) {
 
       <div class="stats-grid">
         <article class="stat-card">
-          <span class="stat-card-label">Jetzt fällig</span>
-          <strong>${stats.sessionDue}</strong>
-          <small>inklusive bis zu ${state.settings.newCardsPerDay} neuer Karten</small>
+          <span class="stat-card-label">Nächste Runde</span>
+          <strong>${stats.studyRoundCount}</strong>
+          <small>bis zu ${state.settings.newCardsPerDay} Karten pro Runde</small>
         </article>
         <article class="stat-card">
           <span class="stat-card-label">Noch neu</span>
@@ -1632,7 +1639,7 @@ function renderStatistics() {
           </div>
           ${renderForecast(stats.forecast)}
           <p class="analytics-note">
-            Die Vorschau kombiniert bekannte Termine mit deinem Limit für neue Karten.
+            Die Vorschau kombiniert bekannte Termine mit deiner gewählten Rundengröße.
           </p>
         </article>
 
@@ -1682,7 +1689,7 @@ function renderStatistics() {
         <article class="analytics-card settings-card">
           <div class="settings-title">
             ${icon("cards")}
-            <div><h3>Neue Karten pro Tag</h3><p>Fällige Wiederholungen haben immer Vorrang.</p></div>
+            <div><h3>Karten pro Lernrunde</h3><p>Neue Karten erscheinen zuerst, danach die schwierigsten Wiederholungen.</p></div>
           </div>
           <div class="choice-grid compact-choices">
             ${[5, 10, 20, 30]
@@ -1693,7 +1700,7 @@ function renderStatistics() {
                     data-setting="newCardsPerDay"
                     data-setting-value="${amount}"
                     type="button"
-                  ><strong>${amount}</strong><span>pro Tag</span></button>
+                  ><strong>${amount}</strong><span>pro Runde</span></button>
                 `,
               )
               .join("")}
@@ -1995,10 +2002,10 @@ function retentionExplanation(retention) {
 }
 
 function newCardLoadMessage(amount) {
-  if (amount <= 5) return "Ein ruhiger Einstieg mit gut kontrollierbarer Folgelast.";
-  if (amount <= 10) return "Ausgewogen für regelmäßige kurze Lerneinheiten.";
-  if (amount <= 20) return "Spürbar mehr neue Wörter und entsprechend mehr Wiederholungen.";
-  return "Intensiv: Kann in den nächsten Tagen eine deutliche Wiederholungswelle erzeugen.";
+  if (amount <= 5) return "Sehr kurze Runden mit viel Kontrolle über die Folgelast.";
+  if (amount <= 10) return "Ausgewogen für regelmäßige, konzentrierte Lerneinheiten.";
+  if (amount <= 20) return "Spürbar mehr Karten pro Runde, gut für längere Sitzungen.";
+  return "Intensiv: 30 Karten pro Runde, wenn du einen Stapel gezielt durcharbeiten willst.";
 }
 
 function timeGoalMessage(stats) {
@@ -2594,16 +2601,40 @@ async function deleteBackup(id) {
 }
 
 function getStudyCards(deck) {
-  const now = Date.now();
-  const due = deck.cards
-    .filter((card) => card.learning.status !== "new" && Date.parse(card.learning.dueAt) <= now)
-    .sort((a, b) => Date.parse(a.learning.dueAt) - Date.parse(b.learning.dueAt));
+  const roundLimit = state.settings.newCardsPerDay;
   const fresh = deck.cards
     .filter((card) => card.learning.status === "new")
     .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
-    .slice(0, state.settings.newCardsPerDay);
+    .slice(0, roundLimit);
 
-  return [...due, ...fresh];
+  if (fresh.length) return fresh;
+
+  return [...deck.cards]
+    .sort((a, b) => studyPriorityScore(b) - studyPriorityScore(a) || studyPriorityTieBreak(a, b))
+    .slice(0, roundLimit);
+}
+
+function studyPriorityScore(card) {
+  const difficultyWeight = { hard: 12, medium: 6, easy: 1, unknown: 3 }[getEffectiveDifficulty(card)] ?? 3;
+  const statusWeight = { learning: 10, review: 2, new: 20 }[card.learning.status] ?? 0;
+  const dueAt = Date.parse(card.learning.dueAt);
+  const overdueDays = Number.isFinite(dueAt) ? Math.max(0, (Date.now() - dueAt) / 86400000) : 0;
+  const intervalPenalty = Math.max(0, 8 - Math.max(0, numberOr(card.learning.intervalDays, 0))) * 0.35;
+  return (
+    statusWeight +
+    difficultyWeight +
+    card.learning.lapseCount * 4 +
+    Math.max(0, 3 - card.learning.ease) * 3 +
+    overdueDays * 0.8 +
+    intervalPenalty
+  );
+}
+
+function studyPriorityTieBreak(a, b) {
+  const aReviewed = Date.parse(a.learning.lastReviewedAt ?? a.createdAt);
+  const bReviewed = Date.parse(b.learning.lastReviewedAt ?? b.createdAt);
+  if (aReviewed !== bReviewed) return aReviewed - bReviewed;
+  return Date.parse(a.createdAt) - Date.parse(b.createdAt);
 }
 
 function startStudy(mode = "scheduled") {
@@ -2612,22 +2643,20 @@ function startStudy(mode = "scheduled") {
 
   const normalizedMode = mode === true ? "practice" : mode === false ? "scheduled" : mode;
   const practice = normalizedMode === "practice";
-  const fullReview = normalizedMode === "full";
-  const cards = practice ? [...deck.cards] : fullReview ? [...deck.cards] : getStudyCards(deck);
+  const cards = practice ? [...deck.cards] : getStudyCards(deck);
   if (!cards.length) {
-    showToast(practice || fullReview ? "Dieser Stapel enthält noch keine Karten." : "Für heute ist nichts mehr fällig.");
+    showToast(practice ? "Dieser Stapel enthält noch keine Karten." : "Dieser Stapel enthält noch keine Karten für eine Lernrunde.");
     return;
   }
 
   state.study = {
     deckId: deck.id,
-    cardIds: shuffleArray(cards.map((card) => card.id)),
+    cardIds: practice ? shuffleArray(cards.map((card) => card.id)) : cards.map((card) => card.id),
     index: 0,
     flipped: false,
     hintVisible: false,
     responses: {},
     practice,
-    fullReview,
     completed: false,
     startedAt: new Date().toISOString(),
     cardShownAt: Date.now(),
@@ -2678,7 +2707,7 @@ function renderStudy() {
     <section class="study-view">
       <div class="study-header">
         <div>
-          <span class="eyebrow">${state.study.practice ? "Freies Üben" : state.study.fullReview ? "Alle Karten prüfen" : "Geplante Wiederholung"}</span>
+          <span class="eyebrow">${state.study.practice ? "Freies Üben" : "Stapelrunde"}</span>
           <strong>${completedCount} von ${total} bearbeitet</strong>
         </div>
         <button class="button button-compact button-secondary" data-study-action="shuffle" type="button">
@@ -3916,7 +3945,6 @@ function handleAction(action) {
     "edit-deck": () => openDeckModal(deck?.id),
     "delete-deck": removeActiveDeck,
     "start-study": () => startStudy("scheduled"),
-    "start-full-study": () => startStudy("full"),
     "start-practice": () => startStudy("practice"),
     "restart-practice": () => startStudy("practice"),
     "end-study": endStudy,

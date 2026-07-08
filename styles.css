@@ -4839,9 +4839,9 @@ h3 {
 
 .deck-primary-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
   gap: 9px;
-  min-width: min(100%, 560px);
+  min-width: min(100%, 410px);
 }
 
 .deck-primary-actions .button {
